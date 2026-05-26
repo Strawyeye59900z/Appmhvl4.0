@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  FUNCIONARIO
+  MORADOR
+}
+
+enum EncomendaStatus {
+  PENDENTE
+  RETIRADA
+  DEVOLVIDA
+}
+
+enum TipoReserva {
+  DIARIO
+  POR_HORA
+}
+
+enum FacialSyncStatus {
+  PENDENTE
+  EM_FILA
+  ENVIANDO
+  OK
+  FALHOU
+}
+
+// ─── Modelos ──────────────────────────────────────────────────────────────────
+
+model Admin {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Funcionario {
+  id             String   @id @default(cuid())
+  nome           String
+  fotoUrl        String?
+  passwordHash   String?
+  primeiroAcesso Boolean  @default(true)
+  ativo          Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  encomendas Encomenda[]
+}
+
+model Apartamento {
+  id             String   @id @default(cuid())
+  numero         String   @unique
+  bloco          String?
+  senhaHash      String?
+  primeiroAcesso Boolean  @default(true)
+  ativo          Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  moradores Morador[]
+  reservas  Reserva[]
+}
+
+model Morador {
+  id            String   @id @default(cuid())
+  nome          String
+  cpf           String?  @unique
+  whatsapp      String?
+  fotoUrl       String?
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  apartamentoId String
+  apartamento   Apartamento @relation(fields: [apartamentoId], references: [id])
+
+  encomendas  Encomenda[]
+  facialSyncs FacialSync[]
+}
+
+model Encomenda {
+  id          String          @id @default(cuid())
+  descricao   String?
+  status      EncomendaStatus @default(PENDENTE)
+  notificado  Boolean         @default(false)
+  retiradoEm  DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  moradorId     String
+  morador       Morador     @relation(fields: [moradorId], references: [id])
+  funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
+}
+
+model EspacoReserva {
+  id        String      @id @default(cuid())
+  nome      String      @unique
+  tipo      TipoReserva
+  ativo     Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  reservas Reserva[]
+}
+
+model Reserva {
+  id          String    @id @default(cuid())
+  data        DateTime  @db.Date
+  horaInicio  DateTime? @db.Time
+  horaFim     DateTime? @db.Time
+  observacao  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  apartamentoId   String
+  apartamento     Apartamento   @relation(fields: [apartamentoId], references: [id])
+  espacoReservaId String
+  espacoReserva   EspacoReserva @relation(fields: [espacoReservaId], references: [id])
+
+  @@unique([espacoReservaId, data, horaInicio])
+}
+
+model Configuracao {
+  chave     String   @id
+  valor     String
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  role       Role
+  acao       String
+  entidade   String?
+  entidadeId String?
+  payload    Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([entidade, entidadeId])
+}
+
+model HikvisionTerminal {
+  id           String    @id @default(cuid())
+  nome         String
+  host         String
+  porta        Int       @default(80)
+  username     String
+  passwordEnc  String
+  ativo        Boolean   @default(true)
+  ultimoPing   DateTime?
+  ultimoStatus String?
+  createdAt    DateTime  @default(now())
+
+  sincronizacoes FacialSync[]
+}
+
+model FacialSync {
+  id         String           @id @default(cuid())
+  status     FacialSyncStatus @default(PENDENTE)
+  tentativas Int              @default(0)
+  ultimoErro String?
+  enviadoEm  DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  moradorId  String
+  morador    Morador           @relation(fields: [moradorId], references: [id])
+  terminalId String
+  terminal   HikvisionTerminal @relation(fields: [terminalId], references: [id])
+
+  @@unique([moradorId, terminalId])
+  @@index([status, updatedAt])
+}

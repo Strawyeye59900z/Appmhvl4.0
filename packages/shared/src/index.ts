@@ -3,33 +3,21 @@
  * Espelham o schema Prisma — manter sincronizado ao editar prisma/schema.prisma.
  */
 
-export enum StatusFacial {
-  PENDENTE = 'PENDENTE',
-  REGISTRADO = 'REGISTRADO',
+export enum Role {
+  ADMIN = 'ADMIN',
+  FUNCIONARIO = 'FUNCIONARIO',
+  MORADOR = 'MORADOR',
 }
 
-export enum TipoEncomenda {
-  CAIXA = 'CAIXA',
-  ENVELOPE = 'ENVELOPE',
-  SACOLA = 'SACOLA',
-}
-
-export enum StatusEncomenda {
+export enum EncomendaStatus {
   PENDENTE = 'PENDENTE',
   RETIRADA = 'RETIRADA',
-  CANCELADA = 'CANCELADA',
+  DEVOLVIDA = 'DEVOLVIDA',
 }
 
-export enum WhatsappStatus {
-  PENDENTE = 'PENDENTE',
-  ENVIADA = 'ENVIADA',
-  FALHOU = 'FALHOU',
-}
-
-export enum Espaco {
-  QUADRA = 'QUADRA',
-  CHURRASQUEIRA = 'CHURRASQUEIRA',
-  SALAO_FESTAS = 'SALAO_FESTAS',
+export enum TipoReserva {
+  DIARIO = 'DIARIO',
+  POR_HORA = 'POR_HORA',
 }
 
 export enum FacialSyncStatus {
@@ -40,15 +28,18 @@ export enum FacialSyncStatus {
   FALHOU = 'FALHOU',
 }
 
-export type UserRole = 'admin' | 'funcionario' | 'morador';
+export type JwtPayload = {
+  sub: string;
+  role: Role;
+  iat: number;
+  exp: number;
+};
 
 export const REGRAS = {
-  fotoMaxBytes: 1024 * 1024,                    // 1 MB
-  encomendaJanelaEditMin: 10,                   // 10 min para editar encomenda
-  reservaAntecedenciaDias: 90,                  // até 90 dias de antecedência
-  quadraHorasMaxPorAp: 4,                       // máximo 4h/AP/dia na quadra
-  quadraHoraMin: 0,
-  quadraHoraMax: 23,
+  fotoMaxBytes: 1024 * 1024,
+  encomendaJanelaEditMin: 10,
+  reservaAntecedenciaDias: 90,
+  quadraHorasMaxPorAp: 4,
   cancelamentoChurrasqueiraSalaoHorasAntes: 24,
   facialSyncMaxTentativas: 5,
 } as const;
