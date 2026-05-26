@@ -5,9 +5,9 @@ import { Package, CheckCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { encomendas as encomendasApi, moradores as moradoresApi } from '@/lib/api';
 
 interface Morador {
@@ -24,11 +24,45 @@ interface Encomenda {
   funcionario: { id: string; nome: string };
 }
 
+const TIPOS = ['Caixa', 'Pacote', 'Carta'];
+const ORIGENS_RAPIDAS = ['Amazon', 'Mercado Livre', 'Shopee', 'iFood', 'Correios'];
+
+function BotaoSelecao({
+  opcoes,
+  valor,
+  onChange,
+}: {
+  opcoes: string[];
+  valor: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {opcoes.map((op) => (
+        <button
+          key={op}
+          type="button"
+          onClick={() => onChange(op === valor ? '' : op)}
+          className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+            valor === op
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-background border-border hover:bg-muted'
+          }`}
+        >
+          {op}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function PorteiroPage() {
   const [moradores, setMoradores] = useState<Morador[]>([]);
   const [pendentes, setPendentes] = useState<Encomenda[]>([]);
   const [moradorId, setMoradorId] = useState('');
-  const [descricao, setDescricao] = useState('');
+  const [tipo, setTipo] = useState('');
+  const [origem, setOrigem] = useState('');
+  const [origemCustom, setOrigemCustom] = useState('');
   const [loading, setLoading] = useState(false);
   const [registrando, setRegistrando] = useState(false);
   const [erro, setErro] = useState('');
@@ -38,9 +72,7 @@ export default function PorteiroPage() {
     try {
       const data = await encomendasApi.pendentes();
       setPendentes(data);
-    } catch {
-      // ignora — exibe lista vazia
-    }
+    } catch { /* exibe lista vazia */ }
   }, []);
 
   useEffect(() => {
@@ -51,17 +83,24 @@ export default function PorteiroPage() {
     ]).finally(() => setLoading(false));
   }, [carregarPendentes]);
 
+  function buildDescricao() {
+    const partes: string[] = [];
+    if (tipo) partes.push(tipo);
+    const ori = origem === 'Outros' ? origemCustom.trim() : origem;
+    if (ori) partes.push(ori);
+    return partes.join(' · ') || undefined;
+  }
+
   async function handleRegistrar(e: React.FormEvent) {
     e.preventDefault();
-    setErro('');
-    setSucesso('');
+    setErro(''); setSucesso('');
     setRegistrando(true);
     try {
-      await encomendasApi.criar({ moradorId, descricao: descricao || undefined });
-      setSucesso('Encomenda registrada com sucesso!');
-      setMoradorId('');
-      setDescricao('');
+      await encomendasApi.criar({ moradorId, descricao: buildDescricao() });
+      setSucesso('Encomenda registrada!');
+      setMoradorId(''); setTipo(''); setOrigem(''); setOrigemCustom('');
       await carregarPendentes();
+      setTimeout(() => setSucesso(''), 3000);
     } catch (err: any) {
       setErro(err.message ?? 'Erro ao registrar encomenda');
     } finally {
@@ -93,13 +132,14 @@ export default function PorteiroPage() {
         <h1 className="text-2xl font-semibold">Portaria</h1>
       </div>
 
-      {/* Formulário de registro */}
+      {/* Formulário */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Registrar encomenda</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleRegistrar} className="space-y-4">
+          <form onSubmit={handleRegistrar} className="space-y-5">
+
             <div className="space-y-2">
               <Label>Morador</Label>
               <Select value={moradorId} onValueChange={setMoradorId} required>
@@ -117,26 +157,39 @@ export default function PorteiroPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="descricao">Descrição (opcional)</Label>
-              <Input
-                id="descricao"
-                placeholder="Ex: caixa grande, Amazon..."
-                value={descricao}
-                onChange={(e) => setDescricao(e.target.value)}
+              <Label>Tipo</Label>
+              <BotaoSelecao opcoes={TIPOS} valor={tipo} onChange={setTipo} />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Origem</Label>
+              <BotaoSelecao
+                opcoes={[...ORIGENS_RAPIDAS, 'Outros']}
+                valor={origem}
+                onChange={(v) => { setOrigem(v); if (v !== 'Outros') setOrigemCustom(''); }}
               />
+              {origem === 'Outros' && (
+                <Input
+                  className="mt-2"
+                  placeholder="Digite a origem..."
+                  value={origemCustom}
+                  onChange={(e) => setOrigemCustom(e.target.value)}
+                  autoFocus
+                />
+              )}
             </div>
 
             {erro && <p className="text-sm text-destructive">{erro}</p>}
-            {sucesso && <p className="text-sm text-green-600">{sucesso}</p>}
+            {sucesso && <p className="text-sm text-green-600 font-medium">{sucesso}</p>}
 
-            <Button type="submit" disabled={registrando || !moradorId}>
+            <Button type="submit" className="w-full" disabled={registrando || !moradorId}>
               {registrando ? 'Registrando...' : 'Registrar encomenda'}
             </Button>
           </form>
         </CardContent>
       </Card>
 
-      {/* Lista de pendentes */}
+      {/* Pendentes */}
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-muted-foreground" />
@@ -145,7 +198,6 @@ export default function PorteiroPage() {
         </div>
 
         {loading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-
         {!loading && pendentes.length === 0 && (
           <p className="text-sm text-muted-foreground">Nenhuma encomenda pendente.</p>
         )}
