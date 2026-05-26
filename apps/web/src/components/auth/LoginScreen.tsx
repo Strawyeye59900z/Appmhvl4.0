@@ -33,14 +33,11 @@ export function LoginScreen() {
     setError('');
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    const numeroApt = (fd.get('numeroApt') as string).trim();
+    const numeroApartamento = (fd.get('numeroApt') as string).trim();
     const password = fd.get('password') as string;
     try {
-      // Resolve número → ID (endpoint público)
-      const { id: apartamentoId } = await authApi.getApartamentoPorNumero(numeroApt);
-      const res = await authApi.loginMorador({ apartamentoId, password });
+      const res = await authApi.loginMorador({ numeroApartamento, password });
       if ('primeiroAcesso' in res) {
-        // Não deve ocorrer — novos apts já nascem com senha 123456
         setErro('Apartamento sem senha configurada. Contate o administrador.');
         return;
       }

@@ -56,7 +56,7 @@ export class AuthService {
   }
 
   async loginMorador(dto: LoginMoradorDto) {
-    const apt = await this.prisma.apartamento.findUnique({ where: { id: dto.apartamentoId } });
+    const apt = await this.prisma.apartamento.findUnique({ where: { numero: dto.numeroApartamento } });
     if (!apt || !apt.ativo) throw new UnauthorizedException('Apartamento não encontrado');
 
     if (apt.primeiroAcesso || !apt.senhaHash) {
@@ -89,15 +89,6 @@ export class AuthService {
       select: { id: true, nome: true, fotoUrl: true },
       orderBy: { nome: 'asc' },
     });
-  }
-
-  async getApartamentoPorNumero(numero: string) {
-    const apt = await this.prisma.apartamento.findUnique({
-      where: { numero },
-      select: { id: true },
-    });
-    if (!apt) throw new UnauthorizedException('Apartamento não encontrado');
-    return apt;
   }
 
   issueTokens(sub: string, role: Role) {

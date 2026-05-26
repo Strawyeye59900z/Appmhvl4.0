@@ -2,7 +2,7 @@ import { IsString, MinLength } from 'class-validator';
 
 export class LoginMoradorDto {
   @IsString()
-  apartamentoId: string;
+  numeroApartamento: string;
 
   @IsString()
   @MinLength(4)

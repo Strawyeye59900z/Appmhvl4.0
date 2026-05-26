@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Req, Res, HttpCode, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req, Res, HttpCode, UnauthorizedException } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginAdminDto } from './dto/login-admin.dto';
@@ -21,11 +21,6 @@ export class AuthController {
   @Get('funcionarios')
   getFuncionarios() {
     return this.auth.getFuncionariosAtivos();
-  }
-
-  @Get('apartamento-por-numero/:numero')
-  getApartamentoPorNumero(@Param('numero') numero: string) {
-    return this.auth.getApartamentoPorNumero(numero);
   }
 
   @Post('admin')
