@@ -13,8 +13,8 @@ async function bootstrap() {
   const origin = process.env.APP_URL ?? 'http://localhost:3000';
   app.enableCors({ origin, credentials: true });
 
-  await app.listen(3001);
-  console.log(`API running on http://localhost:3001/api/v1`);
+  await app.listen(3001, '0.0.0.0');
+  console.log(`API running on http://0.0.0.0:3001/api/v1`);
 }
 
 bootstrap();

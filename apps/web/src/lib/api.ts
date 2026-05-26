@@ -95,6 +95,23 @@ export const moradores = {
   remove: (id: string) => request<any>(`/moradores/${id}`, { method: 'DELETE' }),
 };
 
+// Encomendas
+export const encomendas = {
+  criar: (body: { moradorId: string; descricao?: string }) =>
+    request<any>('/encomendas', { method: 'POST', body: JSON.stringify(body) }),
+  confirmarRetirada: (id: string) =>
+    request<any>(`/encomendas/${id}/retirada`, { method: 'PATCH' }),
+  listar: (params?: { status?: string; moradorId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.moradorId) qs.set('moradorId', params.moradorId);
+    const query = qs.toString();
+    return request<any[]>(`/encomendas${query ? `?${query}` : ''}`);
+  },
+  pendentes: () => request<any[]>('/encomendas/pendentes'),
+  minhas: () => request<any[]>('/encomendas/minhas'),
+};
+
 // Funcionários
 export const funcionarios = {
   list: () => request<any[]>('/funcionarios'),
