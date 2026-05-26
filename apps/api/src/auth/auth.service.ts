@@ -56,7 +56,12 @@ export class AuthService {
   }
 
   async loginMorador(dto: LoginMoradorDto) {
-    let apt = await this.prisma.apartamento.findUnique({ where: { numero: dto.numeroApartamento } });
+    if (!dto.numeroApartamento && !dto.apartamentoId) {
+      throw new UnauthorizedException('Informe o número do apartamento');
+    }
+    let apt = dto.apartamentoId
+      ? await this.prisma.apartamento.findUnique({ where: { id: dto.apartamentoId } })
+      : await this.prisma.apartamento.findUnique({ where: { numero: dto.numeroApartamento } });
     if (!apt || !apt.ativo) throw new UnauthorizedException('Apartamento não encontrado');
 
     // Apartamento sem senha: define 123456 automaticamente

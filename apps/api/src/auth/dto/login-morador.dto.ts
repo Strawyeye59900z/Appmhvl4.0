@@ -1,8 +1,13 @@
-import { IsString, MinLength } from 'class-validator';
+import { IsString, MinLength, IsOptional } from 'class-validator';
 
 export class LoginMoradorDto {
+  @IsOptional()
   @IsString()
-  numeroApartamento: string;
+  numeroApartamento?: string;
+
+  @IsOptional()
+  @IsString()
+  apartamentoId?: string;
 
   @IsString()
   @MinLength(4)
