@@ -56,14 +56,19 @@ export class AuthService {
   }
 
   async loginMorador(dto: LoginMoradorDto) {
-    const apt = await this.prisma.apartamento.findUnique({ where: { numero: dto.numeroApartamento } });
+    let apt = await this.prisma.apartamento.findUnique({ where: { numero: dto.numeroApartamento } });
     if (!apt || !apt.ativo) throw new UnauthorizedException('Apartamento não encontrado');
 
-    if (apt.primeiroAcesso || !apt.senhaHash) {
-      return { primeiroAcesso: true };
+    // Apartamento sem senha: define 123456 automaticamente
+    if (!apt.senhaHash) {
+      const senhaHash = await bcrypt.hash('123456', 10);
+      apt = await this.prisma.apartamento.update({
+        where: { id: apt.id },
+        data: { senhaHash, primeiroAcesso: false },
+      });
     }
 
-    const valid = await bcrypt.compare(dto.password, apt.senhaHash);
+    const valid = await bcrypt.compare(dto.password, apt.senhaHash!);
     if (!valid) throw new UnauthorizedException('Credenciais inválidas');
 
     return this.issueTokens(apt.id, Role.MORADOR);
