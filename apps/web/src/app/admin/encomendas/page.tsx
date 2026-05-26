@@ -32,13 +32,13 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
 
 export default function AdminEncomendasPage() {
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
-  const [filtroStatus, setFiltroStatus] = useState('');
+  const [filtroStatus, setFiltroStatus] = useState('TODOS');
   const [loading, setLoading] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await encomendasApi.listar(filtroStatus ? { status: filtroStatus } : {});
+      const data = await encomendasApi.listar(filtroStatus && filtroStatus !== 'TODOS' ? { status: filtroStatus } : {});
       setEncomendas(data);
     } catch {
       setEncomendas([]);
@@ -73,7 +73,7 @@ export default function AdminEncomendasPage() {
             <SelectValue placeholder="Todos os status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos</SelectItem>
+            <SelectItem value="TODOS">Todos</SelectItem>
             <SelectItem value="PENDENTE">Pendentes</SelectItem>
             <SelectItem value="RETIRADA">Retiradas</SelectItem>
             <SelectItem value="DEVOLVIDA">Devolvidas</SelectItem>

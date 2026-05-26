@@ -40,7 +40,7 @@ function formatApt(apt: { numero: string; bloco: string | null }) {
 export default function AdminReservasPage() {
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [espacos, setEspacos] = useState<EspacoReserva[]>([]);
-  const [filtroEspaco, setFiltroEspaco] = useState('');
+  const [filtroEspaco, setFiltroEspaco] = useState('TODOS');
   const [filtroData, setFiltroData] = useState('');
   const [loading, setLoading] = useState(false);
   const [cancelando, setCancelando] = useState<string | null>(null);
@@ -55,7 +55,7 @@ export default function AdminReservasPage() {
     setErro('');
     try {
       const params: any = {};
-      if (filtroEspaco) params.espacoId = filtroEspaco;
+      if (filtroEspaco && filtroEspaco !== 'TODOS') params.espacoId = filtroEspaco;
       if (filtroData) params.data = filtroData;
       const data = await reservasApi.listar(params);
       setReservas(data);
@@ -97,7 +97,7 @@ export default function AdminReservasPage() {
             <SelectValue placeholder="Todos os espaços" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Todos os espaços</SelectItem>
+            <SelectItem value="TODOS">Todos os espaços</SelectItem>
             {espacos.map((e) => (
               <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
             ))}
