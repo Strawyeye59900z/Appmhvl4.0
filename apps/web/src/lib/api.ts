@@ -71,6 +71,8 @@ export const auth = {
   getFuncionarios: () => request<{ id: string; nome: string }[]>('/auth/funcionarios'),
   getApartamentoPorNumero: (numero: string) =>
     request<{ id: string }>(`/auth/apartamento-por-numero/${encodeURIComponent(numero)}`),
+  setupMorador: (body: { apartamentoId: string; novaSenha: string }) =>
+    request<{ accessToken: string }>('/auth/morador/setup', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
 };
 
