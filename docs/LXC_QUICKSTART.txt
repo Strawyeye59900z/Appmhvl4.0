@@ -1,0 +1,179 @@
+================================================================================
+CONDOMÍNIO APP 2.0 — LXC QUICKSTART (COPIAR E COLAR)
+================================================================================
+
+PASSO 1: Verificar se PostgreSQL, Redis, Node.js, Git estão instalados
+================================================================================
+
+# PostgreSQL
+sudo systemctl status postgresql
+
+# Redis
+sudo systemctl status redis-server
+
+# Node.js
+node --version
+npm --version
+
+# Git
+git --version
+
+Se algum não estiver instalado:
+  sudo apt update
+  sudo apt install -y postgresql redis-server nodejs npm git
+
+================================================================================
+PASSO 2: Clonar repositório
+================================================================================
+
+cd ~
+git clone https://github.com/Strawyeye59900z/Appmhvl4.0.git Condominio-app
+cd Condominio-app
+ls -la
+
+================================================================================
+PASSO 3: Configurar .env
+================================================================================
+
+cp .env.example .env
+nano .env
+
+# Edite estes campos:
+DATABASE_URL="postgresql://postgres:SUA_SENHA_PG@localhost:5432/condominio?schema=public"
+JWT_SECRET="$(openssl rand -base64 32)"
+JWT_REFRESH_SECRET="$(openssl rand -base64 32)"
+REDIS_HOST=localhost
+REDIS_PORT=6379
+API_PORT=3001
+APP_SECRET="$(openssl rand -base64 32)"
+
+# Salvar: Ctrl+O, Enter, Ctrl+X
+
+================================================================================
+PASSO 4: Instalar dependências
+================================================================================
+
+npm install
+
+# Verificar workspaces
+npm ls -a --depth=0
+
+================================================================================
+PASSO 5: Prisma setup
+================================================================================
+
+# Gerar Prisma Client
+npm run prisma:generate
+
+# Executar migration
+npm run prisma:migrate:dev -- --name init
+
+# Seed (popular com dados iniciais)
+npm run build -w @condominio/api
+npm run seed -w @condominio/api
+
+# Resultado esperado:
+# ✔ Seeded 1 Admin (username: admin, password: admin123)
+# ✔ Seeded 3 EspacoReserva
+# ✔ Seeded 1 Configuracao
+
+================================================================================
+PASSO 6: Testes
+================================================================================
+
+npm run test -w @condominio/api
+
+# Resultado esperado:
+# Test Suites: 1 passed, 1 total
+# Tests:       6 passed, 6 total
+
+================================================================================
+PASSO 7: Build
+================================================================================
+
+npm run build -w @condominio/api
+
+================================================================================
+PASSO 8: Iniciar API (modo desenvolvimento)
+================================================================================
+
+npm run start:dev -w @condominio/api
+
+# Resultado esperado:
+# [Nest] ... LOG [NestApplication] Nest application successfully started
+# (API escutando em http://localhost:3001/api/v1)
+
+# DEIXE RODANDO NESTE TERMINAL!
+
+================================================================================
+PASSO 9: Health check (NOVO TERMINAL SSH)
+================================================================================
+
+# Abra outro terminal SSH e execute:
+
+curl http://localhost:3001/api/v1/health
+
+# Resultado esperado:
+# {"database":"ok","redis":"ok","uptime":...}
+
+================================================================================
+PASSO 10: Test Login Admin (NOVO TERMINAL SSH)
+================================================================================
+
+curl -X POST http://localhost:3001/api/v1/auth/admin \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# Resultado esperado:
+# {"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...","role":"ADMIN"}
+
+================================================================================
+PASSO 11: Parar API
+================================================================================
+
+# No terminal onde API está rodando, pressione:
+Ctrl+C
+
+# Status esperado:
+# [Nest] ... LOG [NestApplication] Nest application closed
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+❌ ERROR: connect ECONNREFUSED 127.0.0.1:5432
+   → PostgreSQL não está rodando
+   → Verifique: sudo systemctl status postgresql
+   → Ou resete senha: sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'nova_senha';"
+
+❌ ERROR: connect ECONNREFUSED 127.0.0.1:6379
+   → Redis não está rodando
+   → Verifique: sudo systemctl status redis-server
+   → Inicie: sudo systemctl start redis-server
+
+❌ Module not found: @condominio/shared
+   → Limpar e reinstalar:
+   → rm -rf node_modules package-lock.json
+   → npm install
+
+❌ Seed falha com "duplicate key value"
+   → Banco já tem dados
+   → npm run prisma:migrate:reset -- --force
+   → npm run seed -w @condominio/api
+
+================================================================================
+RESUMO — Se tudo funcionou:
+================================================================================
+
+✓ Repo clonado
+✓ .env configurado
+✓ npm install completado
+✓ Prisma migrado e seeded
+✓ Testes passando (6/6)
+✓ API compilada
+✓ Health check respondendo
+✓ Login admin funcionando
+
+Próxima etapa: Etapa 4 (CRUDs base)
+
+================================================================================
