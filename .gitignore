@@ -1,0 +1,47 @@
+# Dependências
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Ambiente
+.env
+.env.local
+.env.*.local
+secrets/
+!secrets/.gitkeep
+
+# Prisma
+prisma/generated/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Testes / cobertura
+coverage/
+.nyc_output/
+
+# Uploads e auth do WhatsApp (runtime)
+uploads/
+auth_info_condominio/
+wa_auth/
+
+# Backups
+backups/
+
+# Docker
+.docker-data/
