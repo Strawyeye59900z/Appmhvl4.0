@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFuncionarioDto } from './dto/create-funcionario.dto';
 import { UpdateFuncionarioDto } from './dto/update-funcionario.dto';
+import { ResetSenhaFuncionarioDto } from './dto/reset-senha-funcionario.dto';
 
 @Injectable()
 export class FuncionariosService {
@@ -37,6 +39,16 @@ export class FuncionariosService {
       where: { id },
       data: dto,
       select: { id: true, nome: true, ativo: true, primeiroAcesso: true, updatedAt: true },
+    });
+  }
+
+  async resetSenha(id: string, dto: ResetSenhaFuncionarioDto) {
+    await this.findOne(id);
+    const passwordHash = await bcrypt.hash(dto.senha, 10);
+    return this.prisma.funcionario.update({
+      where: { id },
+      data: { passwordHash, primeiroAcesso: false },
+      select: { id: true, nome: true, primeiroAcesso: true },
     });
   }
 

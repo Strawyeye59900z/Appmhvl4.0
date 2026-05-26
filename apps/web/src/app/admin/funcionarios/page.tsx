@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { UserCog, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { UserCog, Plus, Trash2, RotateCcw, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,12 @@ export default function FuncionariosPage() {
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
 
+  // estado do modal de senha
+  const [senhaModal, setSenhaModal] = useState<{ id: string; nome: string } | null>(null);
+  const [novaSenha, setNovaSenha] = useState('');
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
+  const [erroSenha, setErroSenha] = useState('');
+
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
@@ -41,18 +47,35 @@ export default function FuncionariosPage() {
 
   async function handleCriar(e: React.FormEvent) {
     e.preventDefault();
-    setErro('');
-    setSucesso('');
+    setErro(''); setSucesso('');
     setCriando(true);
     try {
       await funcionariosApi.create({ nome });
-      setSucesso(`Funcionário "${nome}" criado. Na primeira vez que logar, o sistema pedirá para definir uma senha.`);
+      setSucesso(`Funcionário "${nome}" criado. Defina uma senha clicando no ícone de chave.`);
       setNome('');
       await carregar();
     } catch (err: any) {
       setErro(err.message ?? 'Erro ao criar funcionário');
     } finally {
       setCriando(false);
+    }
+  }
+
+  async function handleDefinirSenha(e: React.FormEvent) {
+    e.preventDefault();
+    if (!senhaModal) return;
+    setErroSenha('');
+    setSalvandoSenha(true);
+    try {
+      await funcionariosApi.resetSenha(senhaModal.id, novaSenha);
+      setSenhaModal(null);
+      setNovaSenha('');
+      setSucesso(`Senha de "${senhaModal.nome}" definida com sucesso.`);
+      await carregar();
+    } catch (err: any) {
+      setErroSenha(err.message ?? 'Erro ao definir senha');
+    } finally {
+      setSalvandoSenha(false);
     }
   }
 
@@ -101,6 +124,46 @@ export default function FuncionariosPage() {
         </CardContent>
       </Card>
 
+      {/* Modal de definir senha */}
+      {senhaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <Card className="w-full max-w-sm mx-4">
+            <CardHeader>
+              <CardTitle className="text-base">Definir senha — {senhaModal.nome}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleDefinirSenha} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nova-senha">Nova senha (mín. 6 caracteres)</Label>
+                  <Input
+                    id="nova-senha"
+                    type="password"
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                    required
+                    minLength={6}
+                    autoFocus
+                  />
+                </div>
+                {erroSenha && <p className="text-sm text-destructive">{erroSenha}</p>}
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => { setSenhaModal(null); setNovaSenha(''); setErroSenha(''); }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" disabled={salvandoSenha || novaSenha.length < 6}>
+                    {salvandoSenha ? 'Salvando...' : 'Salvar senha'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Lista */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-muted-foreground">
@@ -112,7 +175,6 @@ export default function FuncionariosPage() {
       </div>
 
       {loading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-
       {!loading && lista.length === 0 && (
         <p className="text-sm text-muted-foreground">Nenhum funcionário cadastrado.</p>
       )}
@@ -134,7 +196,7 @@ export default function FuncionariosPage() {
                   <td className="px-4 py-3 font-medium">{f.nome}</td>
                   <td className="px-4 py-3">
                     {f.primeiroAcesso ? (
-                      <Badge variant="outline">Aguardando senha</Badge>
+                      <Badge variant="outline">Sem senha</Badge>
                     ) : (
                       <Badge variant="secondary">Ativo</Badge>
                     )}
@@ -143,14 +205,25 @@ export default function FuncionariosPage() {
                     {new Date(f.createdAt).toLocaleDateString('pt-BR')}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemover(f.id, f.nome)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => { setSenhaModal({ id: f.id, nome: f.nome }); setErroSenha(''); setNovaSenha(''); }}
+                        title="Definir senha"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemover(f.id, f.nome)}
+                        className="text-destructive hover:text-destructive"
+                        title="Remover"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -9,6 +9,7 @@ import { Role } from '../common/roles.enum';
 import { FuncionariosService } from './funcionarios.service';
 import { CreateFuncionarioDto } from './dto/create-funcionario.dto';
 import { UpdateFuncionarioDto } from './dto/update-funcionario.dto';
+import { ResetSenhaFuncionarioDto } from './dto/reset-senha-funcionario.dto';
 
 @Controller('funcionarios')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -37,6 +38,12 @@ export class FuncionariosController {
   @Roles(Role.ADMIN)
   update(@Param('id') id: string, @Body() dto: UpdateFuncionarioDto) {
     return this.service.update(id, dto);
+  }
+
+  @Patch(':id/senha')
+  @Roles(Role.ADMIN)
+  resetSenha(@Param('id') id: string, @Body() dto: ResetSenhaFuncionarioDto) {
+    return this.service.resetSenha(id, dto);
   }
 
   @Delete(':id')

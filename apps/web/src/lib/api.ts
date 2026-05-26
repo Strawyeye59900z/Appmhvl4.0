@@ -120,5 +120,7 @@ export const funcionarios = {
     request<any>('/funcionarios', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: object) =>
     request<any>(`/funcionarios/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetSenha: (id: string, senha: string) =>
+    request<any>(`/funcionarios/${id}/senha`, { method: 'PATCH', body: JSON.stringify({ senha }) }),
   remove: (id: string) => request<any>(`/funcionarios/${id}`, { method: 'DELETE' }),
 };
