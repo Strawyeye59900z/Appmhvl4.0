@@ -91,6 +91,15 @@ export class AuthService {
     });
   }
 
+  async getApartamentoPorNumero(numero: string) {
+    const apt = await this.prisma.apartamento.findUnique({
+      where: { numero },
+      select: { id: true },
+    });
+    if (!apt) throw new UnauthorizedException('Apartamento não encontrado');
+    return apt;
+  }
+
   issueTokens(sub: string, role: Role) {
     const accessToken = this.jwt.sign(
       { sub, role },

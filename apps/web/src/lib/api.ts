@@ -69,6 +69,8 @@ export const auth = {
       body: JSON.stringify(body),
     }),
   getFuncionarios: () => request<{ id: string; nome: string }[]>('/auth/funcionarios'),
+  getApartamentoPorNumero: (numero: string) =>
+    request<{ id: string }>(`/auth/apartamento-por-numero/${encodeURIComponent(numero)}`),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
 };
 
@@ -110,6 +112,25 @@ export const encomendas = {
   },
   pendentes: () => request<any[]>('/encomendas/pendentes'),
   minhas: () => request<any[]>('/encomendas/minhas'),
+};
+
+// Reservas
+export const reservas = {
+  espacos: () => request<any[]>('/reservas/espacos'),
+  disponibilidade: (espacoId: string, data: string) =>
+    request<any>(`/reservas/disponibilidade?espacoId=${espacoId}&data=${data}`),
+  criar: (body: { espacoReservaId: string; data: string; horaInicio?: string; observacao?: string; apartamentoId?: string }) =>
+    request<any>('/reservas', { method: 'POST', body: JSON.stringify(body) }),
+  cancelar: (id: string) => request<any>(`/reservas/${id}`, { method: 'DELETE' }),
+  listar: (params?: { espacoId?: string; data?: string; apartamentoId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.espacoId) qs.set('espacoId', params.espacoId);
+    if (params?.data) qs.set('data', params.data);
+    if (params?.apartamentoId) qs.set('apartamentoId', params.apartamentoId);
+    const query = qs.toString();
+    return request<any[]>(`/reservas${query ? `?${query}` : ''}`);
+  },
+  minhas: () => request<any[]>('/reservas/minhas'),
 };
 
 // Funcionários

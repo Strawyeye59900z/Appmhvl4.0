@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Package, Clock, CheckCircle, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
+import { Package, Clock, CheckCircle, RotateCcw, CalendarDays } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { encomendas as encomendasApi } from '@/lib/api';
@@ -63,9 +64,17 @@ export default function MePage() {
 
   return (
     <div className="min-h-screen bg-muted/30 p-4 space-y-6 max-w-lg mx-auto">
-      <div className="flex items-center gap-3 pt-2">
-        <Package className="h-6 w-6 text-muted-foreground" />
-        <h1 className="text-xl font-semibold">Minhas Encomendas</h1>
+      {/* Navegação de seções */}
+      <div className="flex gap-1 rounded-lg bg-muted p-1 mt-2">
+        <span className="flex-1 flex items-center justify-center gap-2 rounded-md bg-background px-3 py-1.5 text-sm font-medium shadow-sm">
+          <Package className="h-4 w-4" /> Encomendas
+        </span>
+        <Link
+          href="/me/reservas"
+          className="flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-background hover:text-foreground transition-colors"
+        >
+          <CalendarDays className="h-4 w-4" /> Reservas
+        </Link>
       </div>
 
       {/* Pendentes */}

@@ -32,11 +32,13 @@ export default function MoradoresPage() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
+    setErro('');
     try {
       const [m, a] = await Promise.all([moradoresApi.list(), apartamentosApi.list()]);
       setLista(m);
       setApts(a);
-    } catch {
+    } catch (err: any) {
+      setErro(err.message ?? 'Erro ao carregar moradores');
       setLista([]);
     } finally {
       setLoading(false);
@@ -132,7 +134,10 @@ export default function MoradoresPage() {
       </div>
 
       {loading && <p className="text-sm text-muted-foreground">Carregando...</p>}
-      {!loading && lista.length === 0 && (
+      {!loading && erro && lista.length === 0 && (
+        <p className="text-sm text-destructive">{erro}</p>
+      )}
+      {!loading && !erro && lista.length === 0 && (
         <p className="text-sm text-muted-foreground">Nenhum morador cadastrado.</p>
       )}
 

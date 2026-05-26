@@ -7,6 +7,7 @@ import { ApartamentosModule } from './apartamentos/apartamentos.module';
 import { MoradoresModule } from './moradores/moradores.module';
 import { FuncionariosModule } from './funcionarios/funcionarios.module';
 import { EncomendasModule } from './encomendas/encomendas.module';
+import { ReservasModule } from './reservas/reservas.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { EncomendasModule } from './encomendas/encomendas.module';
     MoradoresModule,
     FuncionariosModule,
     EncomendasModule,
+    ReservasModule,
   ],
 })
 export class AppModule {}

@@ -6,9 +6,8 @@ import { Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { auth as authApi } from '@/lib/api';
 import { saveSession, parseJwtPayload, getSession } from '@/lib/auth';
 
@@ -17,7 +16,6 @@ export function LoginScreen() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Redireciona se já autenticado
   useEffect(() => {
     const session = getSession();
     if (session) redirectByRole(session.role);
@@ -29,30 +27,35 @@ export function LoginScreen() {
     else router.replace('/me');
   }
 
-  async function handleAdmin(e: React.FormEvent<HTMLFormElement>) {
+  // ── MORADOR ─────────────────────────────────────────────────────
+  async function handleMorador(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
     const fd = new FormData(e.currentTarget);
+    const numeroApt = (fd.get('numeroApt') as string).trim();
+    const password = fd.get('password') as string;
     try {
-      const res = await authApi.loginAdmin({
-        username: fd.get('username') as string,
-        password: fd.get('password') as string,
-      });
+      // Resolve número → ID (endpoint público)
+      const { id: apartamentoId } = await authApi.getApartamentoPorNumero(numeroApt);
+      const res = await authApi.loginMorador({ apartamentoId, password });
+      if ('primeiroAcesso' in res) {
+        router.push(`/primeiro-acesso?tipo=morador&id=${apartamentoId}`);
+        return;
+      }
       const payload = parseJwtPayload(res.accessToken);
       if (!payload) throw new Error('Token inválido');
       saveSession({ accessToken: res.accessToken, role: payload.role, sub: payload.sub });
       redirectByRole(payload.role);
     } catch (err: any) {
-      setError(err.message ?? 'Erro ao fazer login');
+      setError(err.message ?? 'Apartamento ou senha incorretos');
     } finally {
       setLoading(false);
     }
   }
 
-  // Estado para login funcionário
+  // ── FUNCIONÁRIO ──────────────────────────────────────────────────
   const [funcionarios, setFuncionarios] = useState<{ id: string; nome: string }[]>([]);
-  const [funcId, setFuncId] = useState('');
   const [primeiroAcessoFunc, setPrimeiroAcessoFunc] = useState(false);
 
   useEffect(() => {
@@ -64,11 +67,13 @@ export function LoginScreen() {
     setError('');
     setLoading(true);
     const fd = new FormData(e.currentTarget);
+    const nomeDigitado = (fd.get('nomeFuncionario') as string).trim().toLowerCase();
+    const password = fd.get('password') as string;
     try {
-      const res = await authApi.loginFuncionario({
-        funcionarioId: funcId,
-        password: fd.get('password') as string,
-      });
+      // Busca pelo nome (case-insensitive) na lista já carregada
+      const func = funcionarios.find((f) => f.nome.toLowerCase() === nomeDigitado);
+      if (!func) throw new Error('Funcionário não encontrado');
+      const res = await authApi.loginFuncionario({ funcionarioId: func.id, password });
       if ('primeiroAcesso' in res) {
         setPrimeiroAcessoFunc(true);
         setLoading(false);
@@ -85,33 +90,17 @@ export function LoginScreen() {
     }
   }
 
-  // Estado para login morador
-  const [apartamentos, setApartamentos] = useState<{ id: string; numero: string; bloco?: string }[]>([]);
-  const [aptId, setAptId] = useState('');
-
-  useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/apartamentos`, {
-      headers: { Authorization: 'Bearer ' },
-    })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data: any[]) => setApartamentos(data))
-      .catch(() => {});
-  }, []);
-
-  async function handleMorador(e: React.FormEvent<HTMLFormElement>) {
+  // ── ADMIN ────────────────────────────────────────────────────────
+  async function handleAdmin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
     setLoading(true);
     const fd = new FormData(e.currentTarget);
     try {
-      const res = await authApi.loginMorador({
-        apartamentoId: aptId,
+      const res = await authApi.loginAdmin({
+        username: fd.get('username') as string,
         password: fd.get('password') as string,
       });
-      if ('primeiroAcesso' in res) {
-        router.push(`/primeiro-acesso?tipo=morador&id=${aptId}`);
-        return;
-      }
       const payload = parseJwtPayload(res.accessToken);
       if (!payload) throw new Error('Token inválido');
       saveSession({ accessToken: res.accessToken, role: payload.role, sub: payload.sub });
@@ -136,27 +125,40 @@ export function LoginScreen() {
 
         <Card>
           <CardContent className="pt-6">
-            <Tabs defaultValue="admin">
+            <Tabs defaultValue="morador">
               <TabsList className="w-full">
-                <TabsTrigger value="admin" className="flex-1">Admin</TabsTrigger>
-                <TabsTrigger value="funcionario" className="flex-1">Porteiro</TabsTrigger>
                 <TabsTrigger value="morador" className="flex-1">Morador</TabsTrigger>
+                <TabsTrigger value="funcionario" className="flex-1">Porteiro</TabsTrigger>
+                <TabsTrigger value="admin" className="flex-1">Admin</TabsTrigger>
               </TabsList>
 
-              {/* Admin */}
-              <TabsContent value="admin">
-                <form onSubmit={handleAdmin} className="space-y-4">
+              {/* Morador */}
+              <TabsContent value="morador">
+                <form onSubmit={handleMorador} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="username">Usuário</Label>
-                    <Input id="username" name="username" placeholder="admin" required autoComplete="username" />
+                    <Label htmlFor="numeroApt">Número do apartamento</Label>
+                    <Input
+                      id="numeroApt"
+                      name="numeroApt"
+                      placeholder="Ex: 101"
+                      required
+                      autoComplete="username"
+                      onChange={() => setError('')}
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
-                    <Input id="password" name="password" type="password" required autoComplete="current-password" />
+                    <Label htmlFor="apt-password">Senha</Label>
+                    <Input
+                      id="apt-password"
+                      name="password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                    />
                   </div>
                   {error && <p className="text-sm text-destructive">{error}</p>}
                   <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? 'Entrando...' : 'Entrar como Admin'}
+                    {loading ? 'Entrando...' : 'Entrar'}
                   </Button>
                 </form>
               </TabsContent>
@@ -170,55 +172,60 @@ export function LoginScreen() {
                 ) : (
                   <form onSubmit={handleFuncionario} className="space-y-4">
                     <div className="space-y-2">
-                      <Label>Funcionário</Label>
-                      <Select value={funcId} onValueChange={setFuncId} required>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione seu nome" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {funcionarios.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="nomeFuncionario">Nome</Label>
+                      <Input
+                        id="nomeFuncionario"
+                        name="nomeFuncionario"
+                        placeholder="Digite seu nome completo"
+                        required
+                        autoComplete="username"
+                        onChange={() => setError('')}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="func-password">Senha</Label>
-                      <Input id="func-password" name="password" type="password" required />
+                      <Input
+                        id="func-password"
+                        name="password"
+                        type="password"
+                        required
+                        autoComplete="current-password"
+                      />
                     </div>
                     {error && <p className="text-sm text-destructive">{error}</p>}
-                    <Button type="submit" className="w-full" disabled={loading || !funcId}>
-                      {loading ? 'Entrando...' : 'Entrar como Porteiro'}
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? 'Entrando...' : 'Entrar'}
                     </Button>
                   </form>
                 )}
               </TabsContent>
 
-              {/* Morador */}
-              <TabsContent value="morador">
-                <form onSubmit={handleMorador} className="space-y-4">
+              {/* Admin */}
+              <TabsContent value="admin">
+                <form onSubmit={handleAdmin} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Apartamento</Label>
-                    <Select value={aptId} onValueChange={setAptId} required>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione seu apartamento" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {apartamentos.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>
-                            {a.bloco ? `${a.bloco} - ${a.numero}` : a.numero}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="username">Usuário</Label>
+                    <Input
+                      id="username"
+                      name="username"
+                      placeholder="admin"
+                      required
+                      autoComplete="username"
+                    />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="apt-password">Senha</Label>
-                    <Input id="apt-password" name="password" type="password" required />
+                    <Label htmlFor="password">Senha</Label>
+                    <Input
+                      id="password"
+                      name="password"
+                      type="password"
+                      required
+                      autoComplete="current-password"
+                    />
                   </div>
                   {error && <p className="text-sm text-destructive">{error}</p>}
-                  <Button type="submit" className="w-full" disabled={loading || !aptId}>
-                    {loading ? 'Entrando...' : 'Entrar como Morador'}
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? 'Entrando...' : 'Entrar'}
                   </Button>
                 </form>
               </TabsContent>
