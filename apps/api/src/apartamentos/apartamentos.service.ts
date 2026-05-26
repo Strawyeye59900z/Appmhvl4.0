@@ -1,7 +1,10 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApartamentoDto } from './dto/create-apartamento.dto';
 import { UpdateApartamentoDto } from './dto/update-apartamento.dto';
+
+const SENHA_PADRAO = '123456';
 
 @Injectable()
 export class ApartamentosService {
@@ -26,8 +29,11 @@ export class ApartamentosService {
   }
 
   async create(dto: CreateApartamentoDto) {
+    const senhaHash = await bcrypt.hash(SENHA_PADRAO, 10);
     try {
-      return await this.prisma.apartamento.create({ data: dto });
+      return await this.prisma.apartamento.create({
+        data: { ...dto, senhaHash, primeiroAcesso: false },
+      });
     } catch (e: any) {
       if (e.code === 'P2002') throw new ConflictException(`Apartamento ${dto.numero} já existe`);
       throw e;

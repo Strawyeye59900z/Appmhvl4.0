@@ -40,7 +40,8 @@ export function LoginScreen() {
       const { id: apartamentoId } = await authApi.getApartamentoPorNumero(numeroApt);
       const res = await authApi.loginMorador({ apartamentoId, password });
       if ('primeiroAcesso' in res) {
-        router.push(`/primeiro-acesso?tipo=morador&id=${apartamentoId}`);
+        // Não deve ocorrer — novos apts já nascem com senha 123456
+        setErro('Apartamento sem senha configurada. Contate o administrador.');
         return;
       }
       const payload = parseJwtPayload(res.accessToken);

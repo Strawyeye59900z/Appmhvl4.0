@@ -13,6 +13,19 @@ async function main() {
     create: { username: 'admin', passwordHash },
   });
 
+  // Define senha padrão 123456 em todos os apartamentos sem senha
+  const senhaPadrao = await bcrypt.hash('123456', 10);
+  const semSenha = await prisma.apartamento.findMany({ where: { senhaHash: null } });
+  for (const apt of semSenha) {
+    await prisma.apartamento.update({
+      where: { id: apt.id },
+      data: { senhaHash: senhaPadrao, primeiroAcesso: false },
+    });
+  }
+  if (semSenha.length > 0) {
+    console.log(`Senha padrão definida para ${semSenha.length} apartamento(s).`);
+  }
+
   const espacos: { nome: string; tipo: 'DIARIO' | 'POR_HORA' }[] = [
     { nome: 'Quadra', tipo: 'POR_HORA' },
     { nome: 'Churrasqueira', tipo: 'DIARIO' },
