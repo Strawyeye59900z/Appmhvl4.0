@@ -23,6 +23,7 @@
     "@nestjs/jwt": "^10.0.0",
     "@nestjs/passport": "^10.0.0",
     "@nestjs/config": "^3.0.0",
+    "@nestjs/mapped-types": "^2.0.0",
     "@nestjs/bull": "^10.0.0",
     "@prisma/client": "^5.22.0",
     "passport": "^0.7.0",

@@ -39,7 +39,7 @@ export class ApartamentosService {
     try {
       return await this.prisma.apartamento.update({ where: { id }, data: dto });
     } catch (e: any) {
-      if (e.code === 'P2002') throw new ConflictException(`Número ${dto.numero} já está em uso`);
+      if (e.code === 'P2002') throw new ConflictException('Número de apartamento já está em uso');
       throw e;
     }
   }
