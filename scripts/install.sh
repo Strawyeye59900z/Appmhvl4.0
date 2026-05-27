@@ -166,6 +166,7 @@ hdr "Passo 7b: Prisma generate + migrate + seed"
 
 npx prisma generate --schema=./prisma/schema.prisma
 npx prisma migrate deploy --schema=./prisma/schema.prisma
+npm run build
 npm run seed
 ok "Banco migrado e seed aplicado"
 
