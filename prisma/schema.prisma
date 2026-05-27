@@ -34,6 +34,11 @@ enum FacialSyncStatus {
   FALHOU
 }
 
+enum TipoVisitante {
+  PERSONAL
+  FUNCIONARIO_TEMP
+}
+
 // ─── Modelos ──────────────────────────────────────────────────────────────────
 
 model Admin {
@@ -46,6 +51,7 @@ model Admin {
 
 model Funcionario {
   id             String   @id @default(cuid())
+  codigoFacial   Int      @unique @default(autoincrement())
   nome           String
   fotoUrl        String?
   passwordHash   String?
@@ -56,6 +62,25 @@ model Funcionario {
 
   encomendas  Encomenda[]
   facialSyncs FacialSync[]
+}
+
+model Visitante {
+  id            String        @id @default(cuid())
+  codigoFacial  Int           @unique @default(autoincrement())
+  nome          String
+  tipo          TipoVisitante
+  fotoUrl       String?
+  token         String        @unique @default(uuid())
+  tokenUsado    Boolean       @default(false)
+  validoAte     DateTime
+  ativo         Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  moradorId     String
+  morador       Morador       @relation(fields: [moradorId], references: [id])
+
+  facialSyncs   FacialSync[]
 }
 
 model Apartamento {
@@ -74,6 +99,7 @@ model Apartamento {
 
 model Morador {
   id            String   @id @default(cuid())
+  codigoFacial  Int      @unique @default(autoincrement())
   nome          String
   cpf           String?  @unique
   whatsapp      String?
@@ -87,6 +113,7 @@ model Morador {
 
   encomendas  Encomenda[]
   facialSyncs FacialSync[]
+  visitantes  Visitante[]
 }
 
 model Encomenda {
@@ -181,10 +208,13 @@ model FacialSync {
   morador       Morador?          @relation(fields: [moradorId], references: [id])
   funcionarioId String?
   funcionario   Funcionario?      @relation(fields: [funcionarioId], references: [id])
+  visitanteId   String?
+  visitante     Visitante?        @relation(fields: [visitanteId], references: [id])
   terminalId    String
   terminal      HikvisionTerminal @relation(fields: [terminalId], references: [id])
 
   @@unique([moradorId, terminalId])
   @@unique([funcionarioId, terminalId])
+  @@unique([visitanteId, terminalId])
   @@index([status, updatedAt])
 }
