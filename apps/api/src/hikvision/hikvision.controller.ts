@@ -46,9 +46,12 @@ export class HikvisionController {
   @Post('sync/:pessoaId/retry')
   reenviarSync(
     @Param('pessoaId') pessoaId: string,
-    @Body() body: { role: 'MORADOR' | 'FUNCIONARIO' },
+    @Body() body: { role: 'MORADOR' | 'FUNCIONARIO' | 'VISITANTE' },
   ) {
-    const role = body.role === 'MORADOR' ? Role.MORADOR : Role.FUNCIONARIO;
+    let role: Role;
+    if (body.role === 'MORADOR') role = Role.MORADOR;
+    else if (body.role === 'FUNCIONARIO') role = Role.FUNCIONARIO;
+    else role = Role.VISITANTE;
     return this.hikvisionService.reenviarSync(pessoaId, role).then(() => ({ ok: true }));
   }
 }

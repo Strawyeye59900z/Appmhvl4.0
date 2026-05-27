@@ -211,15 +211,24 @@ export class HikvisionService {
     });
 
     for (const terminal of terminaisAtivos) {
+      let whereClause: any;
+      let createData: any;
+
+      if (role === Role.MORADOR) {
+        whereClause = { moradorId_terminalId: { moradorId: pessoaId, terminalId: terminal.id } };
+        createData = { moradorId: pessoaId, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null };
+      } else if (role === Role.FUNCIONARIO) {
+        whereClause = { funcionarioId_terminalId: { funcionarioId: pessoaId, terminalId: terminal.id } };
+        createData = { funcionarioId: pessoaId, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null };
+      } else {
+        // VISITANTE
+        whereClause = { visitanteId_terminalId: { visitanteId: pessoaId, terminalId: terminal.id } };
+        createData = { visitanteId: pessoaId, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null };
+      }
+
       const sync = await this.prisma.facialSync.upsert({
-        where:
-          role === Role.MORADOR
-            ? { moradorId_terminalId: { moradorId: pessoaId, terminalId: terminal.id } }
-            : { funcionarioId_terminalId: { funcionarioId: pessoaId, terminalId: terminal.id } },
-        create:
-          role === Role.MORADOR
-            ? { moradorId: pessoaId, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null }
-            : { funcionarioId: pessoaId, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+        where: whereClause,
+        create: createData,
         update: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
       });
 
@@ -232,7 +241,7 @@ export class HikvisionService {
   }
 
   async listarStatusSync() {
-    const [moradores, funcionarios] = await Promise.all([
+    const [moradores, funcionarios, visitantes] = await Promise.all([
       this.prisma.morador.findMany({
         where: { fotoUrl: { not: null }, ativo: true },
         select: {
@@ -252,6 +261,18 @@ export class HikvisionService {
           facialSyncs: { include: { terminal: { select: { id: true, nome: true } } } },
         },
       }),
+      this.prisma.visitante.findMany({
+        where: { fotoUrl: { not: null }, ativo: true },
+        select: {
+          id: true,
+          nome: true,
+          tipo: true,
+          fotoUrl: true,
+          validoAte: true,
+          morador: { select: { nome: true } },
+          facialSyncs: { include: { terminal: { select: { id: true, nome: true } } } },
+        },
+      }),
     ]);
 
     const calcStatus = (syncs: { status: string }[]) => {
@@ -264,6 +285,16 @@ export class HikvisionService {
       return 'PENDENTE';
     };
 
+    const mapSyncs = (syncs: any[]) =>
+      syncs.map((s) => ({
+        terminalId: s.terminalId,
+        terminalNome: s.terminal.nome,
+        status: s.status,
+        tentativas: s.tentativas,
+        ultimoErro: s.ultimoErro,
+        enviadoEm: s.enviadoEm,
+      }));
+
     return [
       ...moradores.map((m) => ({
         id: m.id,
@@ -274,14 +305,7 @@ export class HikvisionService {
           : null,
         fotoUrl: m.fotoUrl,
         statusGeral: calcStatus(m.facialSyncs),
-        syncs: m.facialSyncs.map((s) => ({
-          terminalId: s.terminalId,
-          terminalNome: s.terminal.nome,
-          status: s.status,
-          tentativas: s.tentativas,
-          ultimoErro: s.ultimoErro,
-          enviadoEm: s.enviadoEm,
-        })),
+        syncs: mapSyncs(m.facialSyncs),
       })),
       ...funcionarios.map((f) => ({
         id: f.id,
@@ -290,14 +314,19 @@ export class HikvisionService {
         apto: null,
         fotoUrl: f.fotoUrl,
         statusGeral: calcStatus(f.facialSyncs),
-        syncs: f.facialSyncs.map((s) => ({
-          terminalId: s.terminalId,
-          terminalNome: s.terminal.nome,
-          status: s.status,
-          tentativas: s.tentativas,
-          ultimoErro: s.ultimoErro,
-          enviadoEm: s.enviadoEm,
-        })),
+        syncs: mapSyncs(f.facialSyncs),
+      })),
+      ...visitantes.map((v) => ({
+        id: v.id,
+        nome: v.nome,
+        tipo: 'VISITANTE' as const,
+        tipoVisitante: v.tipo,
+        apto: null,
+        fotoUrl: v.fotoUrl,
+        validoAte: v.validoAte.toISOString(),
+        moradorNome: v.morador.nome,
+        statusGeral: calcStatus(v.facialSyncs),
+        syncs: mapSyncs(v.facialSyncs),
       })),
     ];
   }
