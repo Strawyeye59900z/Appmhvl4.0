@@ -34,8 +34,8 @@ export class ReservasController {
   create(@Body() dto: CreateReservaDto, @Request() req: any) {
     // Para ADMIN: req.user.id é o apartamentoId? Não — admin usa apartamentoId do DTO ou cria em nome de outro.
     // Simplificação: admin pode passar apartamentoId no body; morador usa o seu (sub do JWT = apartamentoId).
-    const apartamentoId = req.user.role === Role.ADMIN && dto['apartamentoId']
-      ? dto['apartamentoId']
+    const apartamentoId = req.user.role === Role.ADMIN && dto.apartamentoId
+      ? dto.apartamentoId
       : req.user.id;
     return this.service.create(dto, apartamentoId);
   }

@@ -59,7 +59,7 @@ export default function MinhasReservasPage() {
   const [data, setData] = useState('');
   const [slots, setSlots] = useState<Slot[] | null>(null);
   const [dispDiario, setDispDiario] = useState<boolean | null>(null);
-  const [horaInicio, setHoraInicio] = useState('');
+  const [horasSelecionadas, setHorasSelecionadas] = useState<string[]>([]);
   const [observacao, setObservacao] = useState('');
   const [loadingDisp, setLoadingDisp] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -87,7 +87,7 @@ export default function MinhasReservasPage() {
     setLoadingDisp(true);
     setSlots(null);
     setDispDiario(null);
-    setHoraInicio('');
+    setHorasSelecionadas([]);
     reservasApi
       .disponibilidade(espacoId, data)
       .then((res: any) => {
@@ -97,6 +97,22 @@ export default function MinhasReservasPage() {
       .catch(() => {})
       .finally(() => setLoadingDisp(false));
   }, [espacoId, data]);
+
+  function toggleHora(hora: string) {
+    setHorasSelecionadas((prev) => {
+      if (prev.includes(hora)) {
+        return prev.filter((h) => h !== hora);
+      }
+      if (prev.length >= 3) return prev; // máximo 3h
+      const todas = [...prev, hora].sort();
+      // Só permite consecutivas: diferença entre primeira e última deve ser = length - 1
+      const horas = todas.map((h) => parseInt(h.split(':')[0], 10));
+      const min = Math.min(...horas);
+      const max = Math.max(...horas);
+      if (max - min !== todas.length - 1) return prev; // não consecutivo
+      return todas;
+    });
+  }
 
   async function handleCancelar(id: string) {
     setCancelando(id);
@@ -116,10 +132,21 @@ export default function MinhasReservasPage() {
     setSalvando(true);
     setErroNova('');
     try {
-      await reservasApi.criar({ espacoReservaId: espacoId, data, horaInicio: horaInicio || undefined, observacao: observacao || undefined });
+      if (espacoSelecionado?.tipo === 'POR_HORA') {
+        const sorted = [...horasSelecionadas].sort();
+        await reservasApi.criar({
+          espacoReservaId: espacoId,
+          data,
+          horaInicio: sorted[0],
+          duracao: sorted.length,
+          observacao: observacao || undefined,
+        });
+      } else {
+        await reservasApi.criar({ espacoReservaId: espacoId, data, observacao: observacao || undefined });
+      }
       await carregarMinhas();
       setView('lista');
-      setEspacoId(''); setData(''); setHoraInicio(''); setObservacao('');
+      setEspacoId(''); setData(''); setHorasSelecionadas([]); setObservacao('');
     } catch (e: any) {
       setErroNova(e.message ?? 'Erro ao criar reserva');
     } finally {
@@ -129,7 +156,7 @@ export default function MinhasReservasPage() {
 
   const espacoSelecionado = espacos.find((e) => e.id === espacoId);
   const podeConfirmar = espacoId && data && (
-    espacoSelecionado?.tipo === 'DIARIO' ? dispDiario === true : !!horaInicio
+    espacoSelecionado?.tipo === 'DIARIO' ? dispDiario === true : horasSelecionadas.length > 0
   );
 
   // ── NOVA RESERVA ────────────────────────────────────────────────
@@ -187,26 +214,58 @@ export default function MinhasReservasPage() {
           {/* Espaço POR_HORA — grid de slots */}
           {!loadingDisp && slots && (
             <div className="space-y-2">
-              <Label>Horário (1h)</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {slots.map((s) => (
-                  <button
-                    key={s.hora}
-                    disabled={!s.disponivel}
-                    onClick={() => setHoraInicio(s.hora)}
-                    className={[
-                      'rounded-md border px-2 py-1.5 text-sm font-medium transition-colors',
-                      !s.disponivel
-                        ? 'opacity-40 cursor-not-allowed bg-muted'
-                        : horaInicio === s.hora
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'hover:bg-accent hover:text-accent-foreground',
-                    ].join(' ')}
-                  >
-                    {s.hora}
-                  </button>
-                ))}
+              <div className="flex items-center justify-between">
+                <Label>Horário (máx. 3h consecutivas)</Label>
+                {horasSelecionadas.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {horasSelecionadas.length}h selecionada{horasSelecionadas.length > 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
+              <div className="grid grid-cols-4 gap-2">
+                {slots.map((s) => {
+                  const selecionado = horasSelecionadas.includes(s.hora);
+                  // Bloqueia seleção se já tem 3 ou se não é consecutivo com os selecionados
+                  const podeSelecionar = s.disponivel && (() => {
+                    if (selecionado) return true;
+                    if (horasSelecionadas.length >= 3) return false;
+                    if (horasSelecionadas.length === 0) return true;
+                    const horaNum = parseInt(s.hora.split(':')[0], 10);
+                    const nums = horasSelecionadas.map((h) => parseInt(h.split(':')[0], 10));
+                    return horaNum === Math.min(...nums) - 1 || horaNum === Math.max(...nums) + 1;
+                  })();
+                  return (
+                    <button
+                      key={s.hora}
+                      disabled={!podeSelecionar && !selecionado}
+                      onClick={() => podeSelecionar || selecionado ? toggleHora(s.hora) : undefined}
+                      className={[
+                        'rounded-md border px-2 py-1.5 text-sm font-medium transition-colors',
+                        !s.disponivel
+                          ? 'opacity-40 cursor-not-allowed bg-muted'
+                          : selecionado
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : !podeSelecionar
+                          ? 'opacity-40 cursor-not-allowed'
+                          : 'hover:bg-accent hover:text-accent-foreground',
+                      ].join(' ')}
+                    >
+                      {s.hora}
+                    </button>
+                  );
+                })}
+              </div>
+              {horasSelecionadas.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {(() => {
+                    const sorted = [...horasSelecionadas].sort();
+                    const inicio = sorted[0];
+                    const fimH = parseInt(sorted[sorted.length - 1].split(':')[0], 10) + 1;
+                    const fim = `${String(fimH).padStart(2, '0')}:00`;
+                    return `Reserva: ${inicio} – ${fim}`;
+                  })()}
+                </p>
+              )}
             </div>
           )}
 

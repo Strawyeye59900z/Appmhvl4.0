@@ -26,11 +26,12 @@ export class MoradoresService {
   }
 
   async create(dto: CreateMoradorDto) {
+    if (!dto.apartamentoId) throw new NotFoundException('Apartamento não informado');
     const apt = await this.prisma.apartamento.findUnique({ where: { id: dto.apartamentoId } });
     if (!apt) throw new NotFoundException('Apartamento não encontrado');
 
     try {
-      return await this.prisma.morador.create({ data: dto });
+      return await this.prisma.morador.create({ data: { ...dto, apartamentoId: dto.apartamentoId! } });
     } catch (e: any) {
       if (e.code === 'P2002') throw new ConflictException('CPF já cadastrado');
       throw e;
@@ -49,6 +50,18 @@ export class MoradoresService {
 
   async remove(id: string) {
     await this.findOne(id);
+    const encomendasCount = await this.prisma.encomenda.count({ where: { moradorId: id } });
+    if (encomendasCount > 0) {
+      throw new ConflictException('Não é possível excluir morador com encomendas vinculadas');
+    }
+    return this.prisma.morador.delete({ where: { id } });
+  }
+
+  async removeDoApartamento(id: string, apartamentoId: string) {
+    const morador = await this.prisma.morador.findUnique({ where: { id } });
+    if (!morador || morador.apartamentoId !== apartamentoId) {
+      throw new NotFoundException('Morador não encontrado neste apartamento');
+    }
     const encomendasCount = await this.prisma.encomenda.count({ where: { moradorId: id } });
     if (encomendasCount > 0) {
       throw new ConflictException('Não é possível excluir morador com encomendas vinculadas');

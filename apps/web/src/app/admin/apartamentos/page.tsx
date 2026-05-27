@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Building2, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Building2, Plus, Trash2, RotateCcw, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,7 @@ export default function ApartamentosPage() {
   const [numero, setNumero] = useState('');
   const [bloco, setBloco] = useState('');
   const [criando, setCriando] = useState(false);
+  const [resetando, setResetando] = useState<string | null>(null);
   const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
 
@@ -46,7 +47,7 @@ export default function ApartamentosPage() {
     setCriando(true);
     try {
       await apartamentosApi.create({ numero, bloco: bloco || undefined });
-      setSucesso(`Apartamento ${bloco ? `${bloco} - ` : ''}${numero} criado.`);
+      setSucesso(`Apartamento ${bloco ? `${bloco} - ` : ''}${numero} criado. Senha padrão: 123456`);
       setNumero(''); setBloco('');
       await carregar();
     } catch (err: any) {
@@ -56,9 +57,23 @@ export default function ApartamentosPage() {
     }
   }
 
+  async function handleResetSenha(id: string, label: string) {
+    if (!confirm(`Redefinir senha do apartamento ${label} para 123456?`)) return;
+    setErro(''); setSucesso('');
+    setResetando(id);
+    try {
+      await apartamentosApi.resetSenha(id);
+      setSucesso(`Senha do apto ${label} redefinida para 123456.`);
+    } catch (err: any) {
+      setErro(err.message ?? 'Erro ao redefinir senha');
+    } finally {
+      setResetando(null);
+    }
+  }
+
   async function handleRemover(id: string, label: string) {
     if (!confirm(`Remover apartamento "${label}"?`)) return;
-    setErro('');
+    setErro(''); setSucesso('');
     try {
       await apartamentosApi.remove(id);
       await carregar();
@@ -120,7 +135,7 @@ export default function ApartamentosPage() {
                 <th className="text-left px-4 py-3 font-medium">Apartamento</th>
                 <th className="text-left px-4 py-3 font-medium">Moradores</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3" />
+                <th className="px-4 py-3 text-right font-medium">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -135,12 +150,22 @@ export default function ApartamentosPage() {
                         {a.ativo ? 'Ativo' : 'Inativo'}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleResetSenha(a.id, label)}
+                        disabled={resetando === a.id}
+                        title="Redefinir senha para 123456"
+                      >
+                        <KeyRound className="h-4 w-4 text-muted-foreground" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemover(a.id, label)}
                         className="text-destructive hover:text-destructive"
+                        title="Remover apartamento"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

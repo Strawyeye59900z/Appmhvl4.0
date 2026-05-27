@@ -39,6 +39,12 @@ export class ApartamentosController {
     return this.service.update(id, dto);
   }
 
+  @Patch(':id/reset-senha')
+  @Roles(Role.ADMIN)
+  resetSenha(@Param('id') id: string) {
+    return this.service.resetSenha(id);
+  }
+
   @Delete(':id')
   @Roles(Role.ADMIN)
   remove(@Param('id') id: string) {

@@ -36,14 +36,33 @@ export class ReservasService {
         throw new BadRequestException('horaInicio é obrigatório para espaços por hora');
       }
       const hora = parseInt(dto.horaInicio.split(':')[0], 10);
-      if (hora < HORA_ABERTURA || hora >= HORA_FECHAMENTO) {
+      const duracao = dto.duracao ?? 1;
+      if (hora < HORA_ABERTURA || hora + duracao > HORA_FECHAMENTO) {
         throw new BadRequestException(
           `Horário disponível: ${HORA_ABERTURA}:00 às ${HORA_FECHAMENTO}:00`,
         );
       }
-      // Usamos valores de referência (1970-01-01) para o campo @db.Time
+
+      // Verificar se alguma hora do bloco já está ocupada
+      const reservasExistentes = await this.prisma.reserva.findMany({
+        where: { espacoReservaId: dto.espacoReservaId, data: dataObj },
+        select: { horaInicio: true, horaFim: true },
+      });
+      const ocupados = new Set(
+        reservasExistentes
+          .filter((r) => r.horaInicio)
+          .map((r) => new Date(r.horaInicio!).getUTCHours()),
+      );
+      for (let h = hora; h < hora + duracao; h++) {
+        if (ocupados.has(h)) {
+          throw new ConflictException(`Horário ${String(h).padStart(2, '0')}:00 já está reservado`);
+        }
+      }
+
       horaInicioObj = new Date(`1970-01-01T${dto.horaInicio}:00.000Z`);
-      horaFimObj = new Date(`1970-01-01T${String(hora + 1).padStart(2, '0')}:00:00.000Z`);
+      horaFimObj = new Date(
+        `1970-01-01T${String(hora + duracao).padStart(2, '0')}:00:00.000Z`,
+      );
     }
 
     try {
@@ -118,18 +137,21 @@ export class ReservasService {
     const dataObj = new Date(data + 'T12:00:00.000Z');
     const reservas = await this.prisma.reserva.findMany({
       where: { espacoReservaId: espacoId, data: dataObj },
-      select: { horaInicio: true },
+      select: { horaInicio: true, horaFim: true },
     });
 
     if (espaco.tipo === TipoReserva.DIARIO) {
       return { tipo: TipoReserva.DIARIO, disponivel: reservas.length === 0 };
     }
 
-    const ocupados = new Set(
-      reservas
-        .filter((r) => r.horaInicio)
-        .map((r) => new Date(r.horaInicio!).getUTCHours()),
-    );
+    // Marca ocupado cada hora dentro do bloco horaInicio–horaFim
+    const ocupados = new Set<number>();
+    for (const r of reservas) {
+      if (!r.horaInicio) continue;
+      const inicio = new Date(r.horaInicio).getUTCHours();
+      const fim = r.horaFim ? new Date(r.horaFim).getUTCHours() : inicio + 1;
+      for (let h = inicio; h < fim; h++) ocupados.add(h);
+    }
     const slots = [];
     for (let h = HORA_ABERTURA; h < HORA_FECHAMENTO; h++) {
       slots.push({ hora: `${String(h).padStart(2, '0')}:00`, disponivel: !ocupados.has(h) });

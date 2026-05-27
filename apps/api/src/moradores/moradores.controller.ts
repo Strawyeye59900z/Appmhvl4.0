@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, UseGuards,
+  Body, Param, Query, UseGuards, Request,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -15,6 +15,13 @@ import { UpdateMoradorDto } from './dto/update-morador.dto';
 export class MoradoresController {
   constructor(private readonly service: MoradoresService) {}
 
+  // MORADOR lista os moradores do seu próprio apartamento
+  @Get('meus')
+  @Roles(Role.MORADOR)
+  findMeus(@Request() req: any) {
+    return this.service.findAll(req.user.id); // sub = apartamentoId
+  }
+
   @Get()
   @Roles(Role.ADMIN, Role.FUNCIONARIO)
   findAll(@Query('apartamentoId') apartamentoId?: string) {
@@ -27,9 +34,13 @@ export class MoradoresController {
     return this.service.findOne(id);
   }
 
+  // MORADOR pode cadastrar moradores no seu próprio apartamento
   @Post()
-  @Roles(Role.ADMIN)
-  create(@Body() dto: CreateMoradorDto) {
+  @Roles(Role.ADMIN, Role.MORADOR)
+  create(@Body() dto: CreateMoradorDto, @Request() req: any) {
+    if (req.user.role === Role.MORADOR) {
+      dto.apartamentoId = req.user.id; // força o apartamento correto
+    }
     return this.service.create(dto);
   }
 
@@ -40,8 +51,13 @@ export class MoradoresController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
-  remove(@Param('id') id: string) {
+  @Roles(Role.ADMIN, Role.MORADOR)
+  async remove(@Param('id') id: string, @Request() req: any) {
+    if (req.user.role === Role.MORADOR) {
+      // Garante que o morador pertence ao apartamento do usuário logado
+      await this.service.removeDoApartamento(id, req.user.id);
+      return;
+    }
     return this.service.remove(id);
   }
 }
