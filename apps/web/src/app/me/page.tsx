@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { Package, Clock, CheckCircle, RotateCcw, CalendarDays, Camera, X } from 'lucide-react';
+import { Package, Clock, CheckCircle, RotateCcw, CalendarDays, Camera, X, Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { encomendas as encomendasApi, fotos as fotosApi } from '@/lib/api';
+import { encomendas as encomendasApi, fotos as fotosApi, visitantes as visitantesApi } from '@/lib/api';
 import { getSession } from '@/lib/auth';
 import { FotoCaptura } from '@/components/ui/foto-captura';
 
@@ -53,6 +53,16 @@ const FACIAL_CLASS: Record<string, string> = {
   SEM_FOTO: 'text-muted-foreground',
 };
 
+interface Visitante {
+  id: string;
+  nome: string;
+  tipo: 'PERSONAL' | 'FUNCIONARIO_TEMP';
+  fotoUrl: string | null;
+  validoAte: string;
+  tokenUsado: boolean;
+  statusGeral: string;
+}
+
 export default function MePage() {
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,12 +70,23 @@ export default function MePage() {
   const [statusFacial, setStatusFacial] = useState<string | null>(null);
   const [dialogFotoAberto, setDialogFotoAberto] = useState(false);
 
+  // Visitantes
+  const [visitantes, setVisitantes] = useState<Visitante[]>([]);
+  const [modalVisitante, setModalVisitante] = useState(false);
+  const [nomeVisitante, setNomeVisitante] = useState('');
+  const [tipoVisitante, setTipoVisitante] = useState<'PERSONAL' | 'FUNCIONARIO_TEMP'>('PERSONAL');
+  const [mesesVisitante, setMesesVisitante] = useState(1);
+  const [linkGerado, setLinkGerado] = useState('');
+  const [salvandoVisitante, setSalvandoVisitante] = useState(false);
+  const [erroVisitante, setErroVisitante] = useState('');
+
   useEffect(() => {
     encomendasApi
       .minhas()
       .then(setEncomendas)
       .catch(() => setEncomendas([]))
       .finally(() => setLoading(false));
+    visitantesApi.meus().then(setVisitantes).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -246,6 +267,154 @@ export default function MePage() {
             </Card>
           ))}
         </section>
+      )}
+
+      {/* Meus Visitantes */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Meus Visitantes</h2>
+          <button
+            onClick={() => { setNomeVisitante(''); setTipoVisitante('PERSONAL'); setMesesVisitante(1); setLinkGerado(''); setErroVisitante(''); setModalVisitante(true); }}
+            className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded border border-input hover:bg-muted transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Adicionar
+          </button>
+        </div>
+
+        {visitantes.length === 0 && (
+          <p className="text-sm text-muted-foreground">Nenhum visitante cadastrado.</p>
+        )}
+
+        <div className="space-y-2">
+          {visitantes.map((v) => (
+            <Card key={v.id}>
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div className="space-y-0.5 flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{v.nome}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                      {v.tipo === 'PERSONAL' ? 'Personal' : 'Func. Temp'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Válido até {new Date(v.validoAte).toLocaleDateString('pt-BR')}
+                    </span>
+                    {!v.tokenUsado && (
+                      <span className="text-xs text-amber-600">Aguardando foto</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  className="text-destructive hover:text-destructive p-1.5 rounded hover:bg-muted transition-colors"
+                  onClick={async () => {
+                    if (!confirm(`Revogar acesso de "${v.nome}"?`)) return;
+                    await visitantesApi.revogar(v.id);
+                    setVisitantes((prev) => prev.filter((x) => x.id !== v.id));
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Modal novo visitante */}
+      {modalVisitante && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => { if (!linkGerado) setModalVisitante(false); }} />
+          <div className="relative bg-background rounded-xl border shadow-lg p-6 w-full max-w-sm space-y-4 mx-4">
+            {!linkGerado ? (
+              <>
+                <h2 className="text-lg font-semibold">Adicionar Visitante</h2>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Nome</label>
+                    <input
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      placeholder="Nome completo"
+                      value={nomeVisitante}
+                      onChange={(e) => setNomeVisitante(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Tipo</label>
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={tipoVisitante}
+                      onChange={(e) => setTipoVisitante(e.target.value as any)}
+                    >
+                      <option value="PERSONAL">Personal Trainer</option>
+                      <option value="FUNCIONARIO_TEMP">Funcionário Temporário</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Acesso por quantos meses? (máx. 12)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={mesesVisitante}
+                      onChange={(e) => setMesesVisitante(Math.min(12, Math.max(1, Number(e.target.value))))}
+                    />
+                  </div>
+                  {erroVisitante && <p className="text-sm text-destructive">{erroVisitante}</p>}
+                  <div className="flex gap-2 justify-end pt-1">
+                    <button
+                      className="px-4 py-2 text-sm rounded border border-input hover:bg-muted transition-colors"
+                      onClick={() => setModalVisitante(false)}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      disabled={salvandoVisitante || !nomeVisitante.trim()}
+                      className="px-4 py-2 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      onClick={async () => {
+                        setSalvandoVisitante(true);
+                        setErroVisitante('');
+                        try {
+                          const res = await visitantesApi.criar({ nome: nomeVisitante, tipo: tipoVisitante, meses: mesesVisitante });
+                          setLinkGerado(res.link);
+                          visitantesApi.meus().then(setVisitantes).catch(() => {});
+                        } catch (err: any) {
+                          setErroVisitante(err.message ?? 'Erro ao criar visitante');
+                        } finally {
+                          setSalvandoVisitante(false);
+                        }
+                      }}
+                    >
+                      {salvandoVisitante ? 'Criando...' : 'Criar'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold">Link gerado!</h2>
+                <p className="text-sm text-muted-foreground">Envie este link para {nomeVisitante} tirar a foto e ativar o acesso facial.</p>
+                <div className="bg-muted rounded p-3 text-xs break-all font-mono">{linkGerado}</div>
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 px-4 py-2 text-sm rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    onClick={() => {
+                      const texto = encodeURIComponent(`Olá ${nomeVisitante}! Acesse o link abaixo para registrar sua foto e ativar seu acesso facial:\n${linkGerado}`);
+                      window.open(`https://wa.me/?text=${texto}`, '_blank');
+                    }}
+                  >
+                    Enviar via WhatsApp
+                  </button>
+                  <button
+                    className="px-4 py-2 text-sm rounded border border-input hover:bg-muted transition-colors"
+                    onClick={() => setModalVisitante(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
