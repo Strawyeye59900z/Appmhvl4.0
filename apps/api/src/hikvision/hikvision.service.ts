@@ -210,6 +210,8 @@ export class HikvisionService {
       where: { ativo: true },
     });
 
+    this.logger.debug(`Enfileirando sync para ${pessoaId} (${role}): encontrados ${terminaisAtivos.length} terminais ativos`);
+
     for (const terminal of terminaisAtivos) {
       let whereClause: any;
       let createData: any;
@@ -237,6 +239,8 @@ export class HikvisionService {
         { syncId: sync.id, terminalId: terminal.id, pessoaId, role },
         { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
       );
+
+      this.logger.debug(`Job enfileirado para terminal ${terminal.nome} (${terminal.id})`);
     }
   }
 

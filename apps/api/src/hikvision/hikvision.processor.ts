@@ -47,6 +47,8 @@ export class HikvisionProcessor {
   async handleSyncFacial(job: Job<SyncFacialPayload>) {
     const { syncId, terminalId, pessoaId, role } = job.data;
 
+    this.logger.debug(`Iniciando sync: ${pessoaId} → terminal ${terminalId} (syncId: ${syncId})`);
+
     await this.prisma.facialSync.update({
       where: { id: syncId },
       data: { status: 'ENVIANDO' },
@@ -56,6 +58,8 @@ export class HikvisionProcessor {
       const terminal = await this.hikvisionService.getTerminalOrThrow(terminalId);
       const password = this.hikvisionService.decryptPassword(terminal.passwordEnc);
       const base = `http://${terminal.host}:${terminal.porta}`;
+
+      this.logger.debug(`Conectando ao terminal ${terminal.nome} (${base})`);
 
       let nome: string;
       let codigoFacial: number;
@@ -110,7 +114,7 @@ export class HikvisionProcessor {
 
       // Step 2: Enviar foto como multipart
       const fotoBuffer = await this.hikvisionService.getFotoBuffer(pessoaId);
-      const faceRecord = buildFaceDataRecord(codigoFacial);
+      const faceRecord = buildFaceDataRecord(String(codigoFacial));
       const boundary = crypto.randomBytes(16).toString('hex');
 
       const body = buildMultipart(boundary, [
@@ -139,12 +143,12 @@ export class HikvisionProcessor {
         data: { status: 'OK', enviadoEm: new Date(), ultimoErro: null },
       });
 
-      this.logger.log(`Sync OK: ${pessoaId} → terminal ${terminal.nome}`);
+      this.logger.log(`✓ Sync OK: ${pessoaId} (${role}) → ${terminal.nome}`);
     } catch (err: any) {
       const responseData = err?.response?.data;
       const msg = responseData?.statusString ?? err?.message ?? 'Erro desconhecido';
       this.logger.error(
-        `Sync falhou: ${pessoaId} → ${syncId}: ${msg}` +
+        `✗ Sync falhou: ${pessoaId} (${role}) → terminal ${terminalId}: ${msg}` +
           (responseData ? ` | Response: ${JSON.stringify(responseData)}` : ''),
       );
 
