@@ -23,9 +23,12 @@ interface Terminal {
 interface SyncEntry {
   id: string;
   nome: string;
-  tipo: 'MORADOR' | 'FUNCIONARIO';
+  tipo: 'MORADOR' | 'FUNCIONARIO' | 'VISITANTE';
+  tipoVisitante?: 'PERSONAL' | 'FUNCIONARIO_TEMP';
   apto: string | null;
   fotoUrl: string | null;
+  validoAte?: string;
+  moradorNome?: string;
   statusGeral: string;
   syncs: { terminalId: string; terminalNome: string; status: string; tentativas: number; ultimoErro: string | null }[];
 }
@@ -58,6 +61,7 @@ export default function HikvisionPage() {
   const [syncStatus, setSyncStatus] = useState<SyncEntry[]>([]);
   const [loadingTerminais, setLoadingTerminais] = useState(true);
   const [loadingSync, setLoadingSync] = useState(true);
+  const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'MORADOR' | 'FUNCIONARIO' | 'VISITANTE'>('TODOS');
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Terminal | null>(null);
 
@@ -140,10 +144,23 @@ export default function HikvisionPage() {
     await carregarTerminais();
   }
 
-  async function handleRetry(pessoaId: string, tipo: 'MORADOR' | 'FUNCIONARIO') {
+  async function handleRetry(pessoaId: string, tipo: 'MORADOR' | 'FUNCIONARIO' | 'VISITANTE') {
     await hikvisionApi.retry(pessoaId, tipo);
     await carregarSync();
   }
+
+  const STATUS_ORDER: Record<string, number> = {
+    PENDENTE: 0, EM_FILA: 0, ENVIANDO: 0, FALHOU: 1, PARCIALMENTE_OK: 2, OK: 3,
+  };
+
+  const syncFiltrado = syncStatus
+    .filter((s) => filtroTipo === 'TODOS' || s.tipo === filtroTipo)
+    .sort((a, b) => {
+      const oa = STATUS_ORDER[a.statusGeral] ?? 4;
+      const ob = STATUS_ORDER[b.statusGeral] ?? 4;
+      if (oa !== ob) return oa - ob;
+      return a.nome.localeCompare(b.nome, 'pt-BR');
+    });
 
   return (
     <div className="space-y-6">
@@ -227,8 +244,26 @@ export default function HikvisionPage() {
       {/* Aba Sincronização */}
       {aba === 'sync' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">{syncStatus.length} pessoa(s) com foto</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex gap-1 flex-wrap">
+              {(['TODOS', 'MORADOR', 'FUNCIONARIO', 'VISITANTE'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFiltroTipo(f)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${
+                    filtroTipo === f
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-input hover:bg-muted'
+                  }`}
+                >
+                  {f === 'TODOS' ? 'Todos' : f === 'MORADOR' ? 'Moradores' : f === 'FUNCIONARIO' ? 'Funcionários' : 'Visitantes'}
+                  {' '}
+                  <span className="opacity-70">
+                    ({f === 'TODOS' ? syncStatus.length : syncStatus.filter((s) => s.tipo === f).length})
+                  </span>
+                </button>
+              ))}
+            </div>
             <Button variant="outline" size="sm" onClick={carregarSync}>
               <RefreshCw className="h-4 w-4 mr-2" /> Atualizar
             </Button>
@@ -243,6 +278,7 @@ export default function HikvisionPage() {
                   <th className="text-left p-3 font-medium">Nome</th>
                   <th className="text-left p-3 font-medium">Tipo</th>
                   <th className="text-left p-3 font-medium">Apto</th>
+                  <th className="text-left p-3 font-medium">Válido até</th>
                   <th className="text-left p-3 font-medium">Status Geral</th>
                   {terminais.map((t) => (
                     <th key={t.id} className="text-left p-3 font-medium">{t.nome}</th>
@@ -250,32 +286,38 @@ export default function HikvisionPage() {
                 </tr>
               </thead>
               <tbody>
-                {syncStatus.map((pessoa) => (
+                {syncFiltrado.map((pessoa) => (
                   <tr key={pessoa.id} className="border-b hover:bg-muted/20">
                     <td className="p-3 font-medium">{pessoa.nome}</td>
-                    <td className="p-3 text-muted-foreground">{pessoa.tipo === 'MORADOR' ? 'Morador' : 'Porteiro'}</td>
+                    <td className="p-3 text-muted-foreground">
+                      {pessoa.tipo === 'MORADOR' ? 'Morador'
+                       : pessoa.tipo === 'FUNCIONARIO' ? 'Porteiro'
+                       : pessoa.tipoVisitante === 'PERSONAL' ? 'Personal'
+                       : 'Func. Temp'}
+                    </td>
                     <td className="p-3 text-muted-foreground">{pessoa.apto ?? '—'}</td>
+                    <td className="p-3 text-muted-foreground text-xs">
+                      {pessoa.validoAte ? new Date(pessoa.validoAte).toLocaleDateString('pt-BR') : '—'}
+                    </td>
                     <td className="p-3"><StatusBadge status={pessoa.statusGeral} /></td>
                     {terminais.map((t) => {
                       const sync = pessoa.syncs.find((s) => s.terminalId === t.id);
                       return (
                         <td key={t.id} className="p-3">
-                          {sync ? (
-                            <div className="flex items-center gap-1">
-                              <StatusBadge status={sync.status} />
-                              {sync.status === 'FALHOU' && (
-                                <button
-                                  className="p-1 rounded hover:bg-muted"
-                                  onClick={() => handleRetry(pessoa.id, pessoa.tipo)}
-                                  title={sync.ultimoErro ?? 'Reenviar'}
-                                >
-                                  <RotateCcw className="h-3 w-3" />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {sync ? <StatusBadge status={sync.status} /> : (
+                              <span className="text-muted-foreground text-xs">—</span>
+                            )}
+                            {sync?.status !== 'OK' && (
+                              <button
+                                className="p-1 rounded hover:bg-muted"
+                                onClick={() => handleRetry(pessoa.id, pessoa.tipo)}
+                                title={sync?.ultimoErro ?? 'Enviar para este terminal'}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       );
                     })}
