@@ -128,22 +128,26 @@ export class FotosService {
   }
 
   async comprimirPublico(input: Buffer): Promise<Buffer> {
-    const qualities = [85, 70, 55, 40];
-    const sizes = [800, 600];
+    // Hikvision requer boa qualidade de imagem para análise facial
+    // Prioriza qualidade sobre tamanho, com limite de 2MB
+    const qualities = [95, 90, 85, 80];
+    const sizes = [1024, 800];
 
     for (const size of sizes) {
       for (const quality of qualities) {
         const result = await sharp(input)
           .resize(size, size, { fit: 'inside', withoutEnlargement: true })
-          .jpeg({ quality })
+          .jpeg({ quality, progressive: true })
           .toBuffer();
-        if (result.length <= 1024 * 1024) return result;
+        // Permite até 2MB para garantir qualidade suficiente
+        if (result.length <= 2 * 1024 * 1024) return result;
       }
     }
 
+    // Fallback: 600x600 com qualidade 75
     return sharp(input)
-      .resize(400, 400, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 30 })
+      .resize(600, 600, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 75, progressive: true })
       .toBuffer();
   }
 }
