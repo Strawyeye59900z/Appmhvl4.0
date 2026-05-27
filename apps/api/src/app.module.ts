@@ -14,6 +14,7 @@ import { ReservasModule } from './reservas/reservas.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { FotosModule } from './fotos/fotos.module';
 import { HikvisionModule } from './hikvision/hikvision.module';
+import { VisitantesModule } from './visitantes/visitantes.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { HikvisionModule } from './hikvision/hikvision.module';
     WhatsAppModule,
     FotosModule,
     HikvisionModule,
+    VisitantesModule,
   ],
 })
 export class AppModule {}

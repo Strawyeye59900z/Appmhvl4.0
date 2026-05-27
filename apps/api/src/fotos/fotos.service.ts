@@ -21,8 +21,19 @@ export class FotosService {
     }
   }
 
+  // Para MORADOR, o JWT sub é o apartamentoId — resolve o moradorId real
+  private async resolverMoradorId(apartamentoId: string): Promise<string> {
+    const morador = await this.prisma.morador.findFirst({
+      where: { apartamentoId, ativo: true },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!morador) throw new BadRequestException('Morador não encontrado para este apartamento');
+    return morador.id;
+  }
+
   async salvarFoto(
-    userId: string,
+    sub: string,
     role: Role,
     buffer: Buffer,
     mimetype: string,
@@ -31,31 +42,69 @@ export class FotosService {
       throw new BadRequestException('Arquivo deve ser uma imagem');
     }
 
-    const compressed = await this.comprimir(buffer);
-    const filename = `${userId}.jpg`;
-    const filepath = path.join(this.uploadsDir, filename);
-    fs.writeFileSync(filepath, compressed);
-
-    const fotoUrl = `/uploads/fotos/${filename}`;
+    const compressed = await this.comprimirPublico(buffer);
 
     if (role === Role.MORADOR) {
-      await this.prisma.morador.update({ where: { id: userId }, data: { fotoUrl } });
+      const moradorId = await this.resolverMoradorId(sub);
+      const filename = `${moradorId}.jpg`;
+      fs.writeFileSync(path.join(this.uploadsDir, filename), compressed);
+      const fotoUrl = `/uploads/fotos/${filename}`;
+      await this.prisma.morador.update({ where: { id: moradorId }, data: { fotoUrl } });
+      await this.hikvisionService.enfileirarSync(moradorId, role);
+      return fotoUrl;
     } else if (role === Role.FUNCIONARIO) {
-      await this.prisma.funcionario.update({ where: { id: userId }, data: { fotoUrl } });
+      const filename = `${sub}.jpg`;
+      fs.writeFileSync(path.join(this.uploadsDir, filename), compressed);
+      const fotoUrl = `/uploads/fotos/${filename}`;
+      await this.prisma.funcionario.update({ where: { id: sub }, data: { fotoUrl } });
+      await this.hikvisionService.enfileirarSync(sub, role);
+      return fotoUrl;
     }
 
-    await this.hikvisionService.enfileirarSync(userId, role);
-
-    return fotoUrl;
+    throw new BadRequestException('Role não suportado para upload de foto');
   }
 
-  async calcularStatusFacial(userId: string, role: Role): Promise<FacialStatus> {
-    let fotoUrl: string | null = null;
+  // Admin: salva foto direto pelo ID da pessoa (moradorId ou funcionarioId)
+  async salvarFotoById(
+    pessoaId: string,
+    role: Role,
+    buffer: Buffer,
+    mimetype: string,
+  ): Promise<string> {
+    if (!mimetype.startsWith('image/')) {
+      throw new BadRequestException('Arquivo deve ser uma imagem');
+    }
+    const compressed = await this.comprimirPublico(buffer);
+
     if (role === Role.MORADOR) {
-      const m = await this.prisma.morador.findUnique({ where: { id: userId }, select: { fotoUrl: true } });
+      const filename = `${pessoaId}.jpg`;
+      fs.writeFileSync(path.join(this.uploadsDir, filename), compressed);
+      const fotoUrl = `/uploads/fotos/${filename}`;
+      await this.prisma.morador.update({ where: { id: pessoaId }, data: { fotoUrl } });
+      await this.hikvisionService.enfileirarSync(pessoaId, role);
+      return fotoUrl;
+    } else if (role === Role.FUNCIONARIO) {
+      const filename = `${pessoaId}.jpg`;
+      fs.writeFileSync(path.join(this.uploadsDir, filename), compressed);
+      const fotoUrl = `/uploads/fotos/${filename}`;
+      await this.prisma.funcionario.update({ where: { id: pessoaId }, data: { fotoUrl } });
+      await this.hikvisionService.enfileirarSync(pessoaId, role);
+      return fotoUrl;
+    }
+
+    throw new BadRequestException('Role não suportado');
+  }
+
+  async calcularStatusFacial(sub: string, role: Role): Promise<FacialStatus> {
+    let fotoUrl: string | null = null;
+    let pessoaId = sub;
+
+    if (role === Role.MORADOR) {
+      pessoaId = await this.resolverMoradorId(sub).catch(() => sub);
+      const m = await this.prisma.morador.findUnique({ where: { id: pessoaId }, select: { fotoUrl: true } });
       fotoUrl = m?.fotoUrl ?? null;
     } else {
-      const f = await this.prisma.funcionario.findUnique({ where: { id: userId }, select: { fotoUrl: true } });
+      const f = await this.prisma.funcionario.findUnique({ where: { id: sub }, select: { fotoUrl: true } });
       fotoUrl = f?.fotoUrl ?? null;
     }
 
@@ -63,8 +112,8 @@ export class FotosService {
 
     const where =
       role === Role.MORADOR
-        ? { moradorId: userId }
-        : { funcionarioId: userId };
+        ? { moradorId: pessoaId }
+        : { funcionarioId: sub };
 
     const syncs = await this.prisma.facialSync.findMany({ where });
     if (syncs.length === 0) return 'PENDENTE';
@@ -78,7 +127,7 @@ export class FotosService {
     return 'PENDENTE';
   }
 
-  private async comprimir(input: Buffer): Promise<Buffer> {
+  async comprimirPublico(input: Buffer): Promise<Buffer> {
     const qualities = [85, 70, 55, 40];
     const sizes = [800, 600];
 
