@@ -1,20 +1,36 @@
-﻿"use client";
+'use client';
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Plus, X, Camera, CheckCircle, RefreshCw } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { moradores as moradoresApi, fotos as fotosApi } from "@/lib/api";
-import { getSession } from "@/lib/auth";
-import { WhatsAppInput, formatWhatsApp, isWhatsAppValid } from "@/components/ui/whatsapp-input";
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, Camera, Plus, Clock, CheckCircle, X } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { moradores as moradoresApi, fotos as fotosApi, encomendas as encomendasApi } from '@/lib/api';
+import { getSession } from '@/lib/auth';
+import { WhatsAppInput, formatWhatsApp, isWhatsAppValid } from '@/components/ui/whatsapp-input';
 
 interface Morador {
   id: string;
   nome: string;
   whatsapp?: string;
+  fotoUrl?: string;
   apartamento?: { numero: string };
+}
+
+interface Encomenda {
+  id: string;
+  descricao?: string;
+  status: 'PENDENTE' | 'RETIRADA' | 'DEVOLVIDA';
+  createdAt: string;
+}
+
+interface Reserva {
+  id: string;
+  dataInicio: string;
+  dataFim: string;
+  local: string;
+  status: string;
 }
 
 interface NovaMoradorForm {
@@ -23,70 +39,59 @@ interface NovaMoradorForm {
   numero: string;
 }
 
-type EstadoFoto = "idle" | "capturando" | "preview" | "enviando" | "sucesso" | "erro";
+type EstadoFoto = 'idle' | 'capturando' | 'preview' | 'enviando' | 'sucesso' | 'erro';
 
 export default function MoradoresPage() {
   const [moradores, setMoradores] = useState<Morador[]>([]);
-  const [moradorFotos, setMoradorFotos] = useState<Record<string, string>>({});
+  const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
+  const [reservas, setReservas] = useState<Reserva[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [carouselIndex, setCarouselIndex] = useState(0);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState<NovaMoradorForm>({ nome: "", ddd: "", numero: "" });
+  const [form, setForm] = useState<NovaMoradorForm>({ nome: '', ddd: '', numero: '' });
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  
+  const [error, setError] = useState('');
+
   // Photo capture state
   const [fotoBlob, setFotoBlob] = useState<Blob | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
-  const [estadoFoto, setEstadoFoto] = useState<EstadoFoto>("idle");
-  const [erroFoto, setErroFoto] = useState("");
-  
+  const [estadoFoto, setEstadoFoto] = useState<EstadoFoto>('idle');
+  const [erroFoto, setErroFoto] = useState('');
+  const [editingMoradorId, setEditingMoradorId] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace("/api/v1", "") ?? "http://localhost:3001";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') ?? 'http://localhost:3001';
+  const session = getSession();
 
   useEffect(() => {
-    moradoresApi.meus()
-      .then(setMoradores)
-      .catch(() => setMoradores([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    const carregarFotosMoradores = async () => {
-      const fotos: Record<string, string> = {};
-      for (const morador of moradores) {
-        try {
-          const res = await fetch(`${apiBase}/uploads/fotos/${morador.id}.jpg`, { method: "HEAD" });
-          if (res.ok) {
-            fotos[morador.id] = `/uploads/fotos/${morador.id}.jpg`;
-          }
-        } catch {}
-      }
-      setMoradorFotos(fotos);
-    };
-
-    if (moradores.length > 0) {
-      carregarFotosMoradores();
-    }
-  }, [moradores, apiBase]);
+    Promise.all([
+      moradoresApi.meus().then(setMoradores).catch(() => setMoradores([])),
+      encomendasApi.minhas().then(setEncomendas).catch(() => setEncomendas([])),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/reservas/minhas`, {
+        headers: { Authorization: `Bearer ${session?.accessToken}` },
+      }).then(r => r.ok ? r.json() : []).then(setReservas).catch(() => setReservas([])),
+    ]).finally(() => setLoading(false));
+  }, [session?.accessToken]);
 
   const pararStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
   }, []);
 
   useEffect(() => () => pararStream(), [pararStream]);
 
   const abrirCamera = useCallback(async () => {
-    setErroFoto("");
+    setErroFoto('');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user" },
+        video: { facingMode: 'user' },
       });
       streamRef.current = stream;
-      setEstadoFoto("capturando");
+      setEstadoFoto('capturando');
       requestAnimationFrame(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -94,7 +99,7 @@ export default function MoradoresPage() {
         }
       });
     } catch (err: any) {
-      setErroFoto(`Erro ao abrir câmera: ${err?.message ?? "desconhecido"}`);
+      setErroFoto(`Erro ao abrir câmera: ${err?.message ?? 'desconhecido'}`);
     }
   }, []);
 
@@ -107,7 +112,7 @@ export default function MoradoresPage() {
     const h = video.videoHeight || 480;
     canvas.width = w;
     canvas.height = h;
-    canvas.getContext("2d")!.drawImage(video, 0, 0, w, h);
+    canvas.getContext('2d')!.drawImage(video, 0, 0, w, h);
 
     canvas.toBlob(
       (blob) => {
@@ -115,9 +120,9 @@ export default function MoradoresPage() {
         pararStream();
         setFotoBlob(blob);
         setFotoPreview(URL.createObjectURL(blob));
-        setEstadoFoto("preview");
+        setEstadoFoto('preview');
       },
-      "image/jpeg",
+      'image/jpeg',
       0.92,
     );
   }, [pararStream]);
@@ -126,37 +131,72 @@ export default function MoradoresPage() {
     if (fotoPreview) URL.revokeObjectURL(fotoPreview);
     setFotoBlob(null);
     setFotoPreview(null);
-    setEstadoFoto("idle");
+    setEstadoFoto('idle');
   }, [fotoPreview]);
+
+  const enviarFoto = useCallback(async (moradorId: string) => {
+    if (!fotoBlob) return;
+    setEstadoFoto('enviando');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', fotoBlob);
+
+      const uploadResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/fotos/upload?moradorId=${moradorId}`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session?.accessToken}` },
+          body: formData,
+        },
+      );
+
+      if (!uploadResponse.ok) throw new Error('Erro ao enviar foto');
+
+      setMoradores(prev =>
+        prev.map(m => (m.id === moradorId ? { ...m, fotoUrl: `/uploads/fotos/${moradorId}.jpg?t=${Date.now()}` } : m))
+      );
+
+      setEstadoFoto('sucesso');
+      setTimeout(() => {
+        setFotoBlob(null);
+        setFotoPreview(null);
+        setEstadoFoto('idle');
+        setEditingMoradorId(null);
+      }, 1500);
+    } catch (err: any) {
+      setErroFoto(err.message ?? 'Erro ao enviar foto');
+      setEstadoFoto('erro');
+    }
+  }, [fotoBlob, session?.accessToken]);
 
   async function handleCriarMorador(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
+    setError('');
 
     if (!form.nome.trim()) {
-      setError("Nome é obrigatório");
+      setError('Nome é obrigatório');
       return;
     }
 
     if (!isWhatsAppValid(form.ddd, form.numero)) {
-      setError("WhatsApp inválido. Preencha o DDD (2 dígitos) e o número (8 ou 9 dígitos).");
+      setError('WhatsApp inválido');
       return;
     }
 
     if (!fotoBlob) {
-      setError("Foto é obrigatória");
+      setError('Foto é obrigatória');
       return;
     }
 
     setSaving(true);
     try {
-      const session = getSession();
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1"}/moradores`,
+        `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/moradores`,
         {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${session?.accessToken}`,
           },
           body: JSON.stringify({
@@ -166,242 +206,288 @@ export default function MoradoresPage() {
         },
       );
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message ?? "Erro ao criar morador");
-      }
+      if (!response.ok) throw new Error('Erro ao criar morador');
 
       const novoMorador: Morador = await response.json();
 
-      // Upload photo with the NEW morador's ID
+      // Upload photo
       if (fotoBlob) {
-        try {
-          const formData = new FormData();
-          formData.append("file", fotoBlob);
+        const formData = new FormData();
+        formData.append('file', fotoBlob);
 
-          const uploadResponse = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1"}/fotos/upload?moradorId=${novoMorador.id}`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${session?.accessToken}`,
-              },
-              body: formData,
-            },
-          );
-
-          if (!uploadResponse.ok) {
-            console.error("Erro ao enviar foto, mas morador foi criado");
-          }
-        } catch (err) {
-          console.error("Erro ao fazer upload da foto:", err);
-        }
+        await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/fotos/upload?moradorId=${novoMorador.id}`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session?.accessToken}` },
+            body: formData,
+          },
+        );
       }
 
-      setMoradores((prev) => [...prev, novoMorador]);
-      // Check if photo was uploaded and add to moradorFotos
-      setMoradorFotos((prev) => ({
-        ...prev,
-        [novoMorador.id]: `/uploads/fotos/${novoMorador.id}.jpg`,
-      }));
-      setForm({ nome: "", ddd: "", numero: "" });
+      setMoradores(prev => [...prev, { ...novoMorador, fotoUrl: `/uploads/fotos/${novoMorador.id}.jpg` }]);
+      setForm({ nome: '', ddd: '', numero: '' });
       setFotoBlob(null);
       if (fotoPreview) URL.revokeObjectURL(fotoPreview);
       setFotoPreview(null);
-      setEstadoFoto("idle");
+      setEstadoFoto('idle');
       setShowAddForm(false);
     } catch (err: any) {
-      setError(err.message ?? "Erro ao criar morador");
+      setError(err.message ?? 'Erro ao criar morador');
     } finally {
       setSaving(false);
     }
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-muted-foreground">Carregando...</p>
-      </div>
-    );
+    return <div className="flex items-center justify-center min-h-screen"><p>Carregando...</p></div>;
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Moradores</h1>
-          <p className="text-sm text-muted-foreground">Gerencie os moradores do seu apartamento</p>
-        </div>
-        <Button
-          onClick={() => {
-            setShowAddForm(true);
-            setError("");
-            setEstadoFoto("idle");
-            setFotoBlob(null);
-            setFotoPreview(null);
-          }}
-          className="inline-flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" /> Adicionar Morador
-        </Button>
-      </div>
+  const morador = moradores[carouselIndex];
+  const pendentes = encomendas.filter(e => e.status === 'PENDENTE');
 
-      {moradores.length === 0 ? (
-        <Card>
-          <CardContent className="p-12 text-center">
-            <p className="text-muted-foreground">Nenhum morador cadastrado.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {moradores.map((morador) => (
-            <Card key={morador.id} className="overflow-hidden">
-              <CardContent className="p-0">
-                <div className="relative bg-muted h-40 flex items-center justify-center overflow-hidden">
-                  {moradorFotos[morador.id] ? (
-                    <img
-                      src={`${apiBase}${moradorFotos[morador.id]}`}
-                      alt={morador.nome}
-                      className="w-full h-full object-cover"
-                    />
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Carrossel Central */}
+      <div className="lg:col-span-2 space-y-4">
+        {editingMoradorId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Camera className="h-5 w-5" />
+                Editar Foto de {moradores.find(m => m.id === editingMoradorId)?.nome}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {estadoFoto === 'idle' && (
+                <Button onClick={abrirCamera} className="w-full" variant="outline">
+                  <Camera className="h-4 w-4 mr-2" />
+                  Abrir Câmera
+                </Button>
+              )}
+
+              {estadoFoto === 'capturando' && (
+                <div className="space-y-4">
+                  <video ref={videoRef} className="w-full rounded-lg bg-black" />
+                  <Button onClick={tirarFoto} className="w-full">Tirar Foto</Button>
+                </div>
+              )}
+
+              {estadoFoto === 'preview' && (
+                <div className="space-y-4">
+                  {fotoPreview && <img src={fotoPreview} alt="Preview" className="w-full rounded-lg" />}
+                  <div className="flex gap-2">
+                    <Button onClick={refazerFoto} variant="outline" className="flex-1">
+                      Refazer
+                    </Button>
+                    <Button onClick={() => enviarFoto(editingMoradorId)} className="flex-1">
+                      Confirmar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {estadoFoto === 'enviando' && (
+                <p className="text-center text-sm text-muted-foreground">Enviando foto...</p>
+              )}
+
+              {estadoFoto === 'sucesso' && (
+                <p className="text-center text-sm text-green-600">✓ Foto enviada com sucesso!</p>
+              )}
+
+              {erroFoto && <p className="text-sm text-red-600">{erroFoto}</p>}
+
+              <Button onClick={() => setEditingMoradorId(null)} variant="ghost" className="w-full">
+                Cancelar
+              </Button>
+            </CardContent>
+          </Card>
+        ) : morador ? (
+          <>
+            <Card>
+              <CardContent className="p-6 space-y-4">
+                <div className="aspect-square rounded-lg overflow-hidden bg-slate-100">
+                  {morador.fotoUrl ? (
+                    <img src={morador.fotoUrl} alt={morador.nome} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <Camera className="h-8 w-8 text-muted-foreground" />
-                      <p className="text-xs text-muted-foreground">Sem foto</p>
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      Sem foto
                     </div>
                   )}
                 </div>
 
-                <div className="p-4 space-y-3">
-                  <div>
-                    <h3 className="font-semibold text-sm">{morador.nome}</h3>
-                    {morador.apartamento && (
-                      <p className="text-xs text-muted-foreground">Apto {morador.apartamento.numero}</p>
-                    )}
-                  </div>
-
-                  {moradorFotos[morador.id] && (
-                    <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200 w-fit text-xs">
-                      <CheckCircle className="h-3 w-3 mr-1" /> Foto registrada
-                    </Badge>
-                  )}
+                <div className="space-y-2">
+                  <h3 className="text-lg font-bold">{morador.nome}</h3>
+                  {morador.whatsapp && <p className="text-sm text-muted-foreground">{morador.whatsapp}</p>}
                 </div>
+
+                <Button onClick={() => setEditingMoradorId(morador.id)} className="w-full" variant="outline">
+                  <Camera className="h-4 w-4 mr-2" />
+                  Editar Foto
+                </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
 
-      {showAddForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => !saving && setShowAddForm(false)} />
-          <div className="relative bg-background rounded-lg border shadow-lg p-6 w-full max-w-sm space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Adicionar Morador</h2>
-              {!saving && (
-                <button
-                  onClick={() => setShowAddForm(false)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  aria-label="Fechar"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              )}
+            {/* Navegação */}
+            <div className="flex gap-2 justify-between">
+              <Button
+                onClick={() => setCarouselIndex(Math.max(0, carouselIndex - 1))}
+                disabled={carouselIndex === 0}
+                variant="outline"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <span className="text-sm text-muted-foreground self-center">
+                {carouselIndex + 1} de {moradores.length}
+              </span>
+
+              <Button
+                onClick={() => setCarouselIndex(Math.min(moradores.length - 1, carouselIndex + 1))}
+                disabled={carouselIndex === moradores.length - 1}
+                variant="outline"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
 
-            <form onSubmit={handleCriarMorador} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Nome completo *</label>
-                <Input
-                  placeholder="João Silva"
-                  value={form.nome}
-                  onChange={(e) => { setForm({ ...form, nome: e.target.value }); setError(""); }}
-                  disabled={saving}
-                />
-              </div>
+            <Button onClick={() => setShowAddForm(true)} className="w-full">
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Morador
+            </Button>
+          </>
+        ) : (
+          <Card>
+            <CardContent className="p-6 text-center">
+              <p className="text-muted-foreground">Nenhum morador registrado</p>
+              <Button onClick={() => setShowAddForm(true)} className="mt-4 w-full">
+                Adicionar Morador
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">WhatsApp *</label>
+        {/* Modal de novo morador */}
+        {showAddForm && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Novo Morador</CardTitle>
+              <button onClick={() => setShowAddForm(false)}>
+                <X className="h-5 w-5" />
+              </button>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCriarMorador} className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium block mb-1">Nome</label>
+                  <Input
+                    value={form.nome}
+                    onChange={e => setForm({ ...form, nome: e.target.value })}
+                    placeholder="Nome completo"
+                  />
+                </div>
+
                 <WhatsAppInput
                   ddd={form.ddd}
                   numero={form.numero}
-                  onDddChange={(ddd) => { setForm({ ...form, ddd }); setError(""); }}
-                  onNumeroChange={(numero) => { setForm({ ...form, numero }); setError(""); }}
+                  onChangeDDD={ddd => setForm({ ...form, ddd })}
+                  onChangeNumero={numero => setForm({ ...form, numero })}
                 />
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Foto do rosto *</label>
-                <p className="text-xs text-muted-foreground">Esta é uma etapa obrigatória para completar o registro.</p>
-                
-                <canvas ref={canvasRef} className="hidden" />
+                {/* Photo Capture */}
+                {estadoFoto === 'idle' && (
+                  <Button onClick={abrirCamera} type="button" className="w-full" variant="outline">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Tirar Foto
+                  </Button>
+                )}
 
-                {estadoFoto === "capturando" && (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="relative w-48 h-48 rounded-full overflow-hidden border-2 bg-black">
-                      <video
-                        ref={videoRef}
-                        className="absolute inset-0 w-full h-full object-cover"
-                        muted
-                        playsInline
-                        autoPlay
-                      />
-                    </div>
-                    <Button type="button" onClick={tirarFoto}>
-                      <Camera className="h-4 w-4 mr-2" />
-                      Tirar foto
+                {estadoFoto === 'capturando' && (
+                  <div className="space-y-2">
+                    <video ref={videoRef} className="w-full rounded-lg bg-black" />
+                    <Button onClick={tirarFoto} type="button" className="w-full">
+                      Capturar
                     </Button>
                   </div>
                 )}
 
-                {estadoFoto === "idle" && (
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="w-48 h-48 rounded-full bg-muted flex items-center justify-center border-2 border-dashed">
-                      <Camera className="h-12 w-12 text-muted-foreground" />
-                    </div>
-                    <Button type="button" onClick={abrirCamera} disabled={saving}>
-                      Abrir câmera
-                    </Button>
-                  </div>
-                )}
-
-                {estadoFoto === "preview" && fotoPreview && (
-                  <div className="flex flex-col items-center gap-3">
-                    <img src={fotoPreview} alt="Preview" className="w-48 h-48 object-cover rounded-full border-2" />
+                {estadoFoto === 'preview' && fotoPreview && (
+                  <div className="space-y-2">
+                    <img src={fotoPreview} alt="Preview" className="w-full rounded-lg" />
                     <div className="flex gap-2">
-                      <Button type="button" variant="outline" onClick={refazerFoto} disabled={saving}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Tirar novamente
+                      <Button onClick={refazerFoto} type="button" variant="outline" className="flex-1">
+                        Refazer
+                      </Button>
+                      <Button type="submit" className="flex-1" disabled={saving}>
+                        {saving ? 'Salvando...' : 'Confirmar'}
                       </Button>
                     </div>
                   </div>
                 )}
 
-                {erroFoto && <p className="text-sm text-destructive text-center">{erroFoto}</p>}
-              </div>
+                {error && <p className="text-sm text-red-600">{error}</p>}
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
-
-              <div className="flex gap-2 justify-end pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowAddForm(false)}
-                  disabled={saving}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={saving || !form.nome.trim() || !isWhatsAppValid(form.ddd, form.numero) || !fotoBlob}
-                >
-                  {saving ? "Salvando..." : "Adicionar Morador"}
-                </Button>
+      {/* Sidebar: Encomendas e Reservas */}
+      <div className="space-y-4">
+        {/* Encomendas Pendentes */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-5 w-5 text-amber-600" />
+              Encomendas Pendentes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {pendentes.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma encomenda</p>
+            ) : (
+              <div className="space-y-2">
+                {pendentes.map(enc => (
+                  <div key={enc.id} className="p-2 bg-amber-50 rounded text-sm border border-amber-200">
+                    <p className="font-medium">{enc.descricao || 'Sem descrição'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(enc.createdAt).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                ))}
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Próximas Reservas */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              Próximas Reservas
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {reservas.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhuma reserva</p>
+            ) : (
+              <div className="space-y-2">
+                {reservas.slice(0, 3).map(res => (
+                  <div key={res.id} className="p-2 bg-blue-50 rounded text-sm border border-blue-200">
+                    <p className="font-medium">{res.local}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(res.dataInicio).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <canvas ref={canvasRef} className="hidden" />
     </div>
   );
 }
