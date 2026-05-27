@@ -114,6 +114,8 @@ export class HikvisionProcessor {
 
       // Step 2: Enviar foto como multipart
       const fotoBuffer = await this.hikvisionService.getFotoBuffer(pessoaId);
+      this.logger.debug(`Foto tamanho: ${fotoBuffer.length} bytes para ${pessoaId}`);
+
       const faceRecord = buildFaceDataRecord(String(codigoFacial));
       const boundary = crypto.randomBytes(16).toString('hex');
 
@@ -121,6 +123,8 @@ export class HikvisionProcessor {
         { name: 'FaceDataRecord', contentType: 'application/json', data: JSON.stringify(faceRecord) },
         { name: 'FaceImage', contentType: 'image/jpeg', filename: `${pessoaId}.jpg`, data: fotoBuffer },
       ]);
+
+      this.logger.debug(`Multipart tamanho: ${body.length} bytes, boundary: ${boundary}`);
 
       try {
         await digestRequest({
