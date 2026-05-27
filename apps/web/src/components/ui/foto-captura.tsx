@@ -104,8 +104,8 @@ export function FotoCaptura({ onSuccess, label = 'Tirar foto' }: FotoCapturaProp
             <img src={previewUrl} alt="Preview" className="w-48 h-48 object-cover rounded-full mx-auto border-2" />
             <div className="flex gap-2 justify-center">
               <Button variant="outline" onClick={refazer}>Escolher outra</Button>
-              <Button onClick={enviar} disabled={estado === 'enviando'}>
-                {estado === 'enviando' ? 'Enviando...' : 'Usar esta foto'}
+              <Button onClick={enviar}>
+                Usar esta foto
               </Button>
             </div>
           </div>
