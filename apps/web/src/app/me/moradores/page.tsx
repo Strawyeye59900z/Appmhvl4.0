@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Camera, Plus, Clock, CheckCircle, X } from 'lucide-react';
+import { Camera, Plus, X, CheckCircle, Clock, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,13 +47,11 @@ export default function MoradoresPage() {
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [carouselIndex, setCarouselIndex] = useState(0);
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState<NovaMoradorForm>({ nome: '', ddd: '', numero: '' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Photo capture state
   const [fotoBlob, setFotoBlob] = useState<Blob | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [estadoFoto, setEstadoFoto] = useState<EstadoFoto>('idle');
@@ -105,8 +103,8 @@ export default function MoradoresPage() {
 
   const tirarFoto = useCallback(() => {
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    const canvas = canvasRef.current || document.createElement('canvas');
+    if (!video) return;
 
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
@@ -137,11 +135,9 @@ export default function MoradoresPage() {
   const enviarFoto = useCallback(async (moradorId: string) => {
     if (!fotoBlob) return;
     setEstadoFoto('enviando');
-
     try {
       const formData = new FormData();
       formData.append('file', fotoBlob);
-
       const uploadResponse = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/fotos/upload?moradorId=${moradorId}`,
         {
@@ -150,13 +146,10 @@ export default function MoradoresPage() {
           body: formData,
         },
       );
-
       if (!uploadResponse.ok) throw new Error('Erro ao enviar foto');
-
       setMoradores(prev =>
-        prev.map(m => (m.id === moradorId ? { ...m, fotoUrl: `/uploads/fotos/${moradorId}.jpg?t=${Date.now()}` } : m))
+        prev.map(m => (m.id === moradorId ? { ...m, fotoUrl: `/uploads/fotos/${moradorId}.jpg?t=${Date.now()}` } : m)),
       );
-
       setEstadoFoto('sucesso');
       setTimeout(() => {
         setFotoBlob(null);
@@ -210,7 +203,6 @@ export default function MoradoresPage() {
 
       const novoMorador: Morador = await response.json();
 
-      // Upload photo
       if (fotoBlob) {
         const formData = new FormData();
         formData.append('file', fotoBlob);
@@ -240,253 +232,41 @@ export default function MoradoresPage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-screen"><p>Carregando...</p></div>;
+    return <div className="flex items-center justify-center min-h-screen"><p className="text-muted-foreground">Carregando...</p></div>;
   }
 
-  const morador = moradores[carouselIndex];
-  const pendentes = encomendas.filter(e => e.status === 'PENDENTE');
-
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Carrossel Central */}
-      <div className="lg:col-span-2 space-y-4">
-        {editingMoradorId ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Camera className="h-5 w-5" />
-                Editar Foto de {moradores.find(m => m.id === editingMoradorId)?.nome}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {estadoFoto === 'idle' && (
-                <Button onClick={abrirCamera} className="w-full" variant="outline">
-                  <Camera className="h-4 w-4 mr-2" />
-                  Abrir Câmera
-                </Button>
-              )}
-
-              {estadoFoto === 'capturando' && (
-                <div className="space-y-4">
-                  <video ref={videoRef} className="w-full rounded-lg bg-black" />
-                  <Button onClick={tirarFoto} className="w-full">Tirar Foto</Button>
-                </div>
-              )}
-
-              {estadoFoto === 'preview' && (
-                <div className="space-y-4">
-                  {fotoPreview && <img src={fotoPreview} alt="Preview" className="w-full rounded-lg" />}
-                  <div className="flex gap-2">
-                    <Button onClick={refazerFoto} variant="outline" className="flex-1">
-                      Refazer
-                    </Button>
-                    <Button onClick={() => enviarFoto(editingMoradorId)} className="flex-1">
-                      Confirmar
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {estadoFoto === 'enviando' && (
-                <p className="text-center text-sm text-muted-foreground">Enviando foto...</p>
-              )}
-
-              {estadoFoto === 'sucesso' && (
-                <p className="text-center text-sm text-green-600">✓ Foto enviada com sucesso!</p>
-              )}
-
-              {erroFoto && <p className="text-sm text-red-600">{erroFoto}</p>}
-
-              <Button onClick={() => setEditingMoradorId(null)} variant="ghost" className="w-full">
-                Cancelar
-              </Button>
-            </CardContent>
-          </Card>
-        ) : morador ? (
-          <>
-            <Card>
-              <CardContent className="p-6 space-y-4">
-                <div className="aspect-square rounded-lg overflow-hidden bg-slate-100">
-                  {morador.fotoUrl ? (
-                    <img src={morador.fotoUrl} alt={morador.nome} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                      Sem foto
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-lg font-bold">{morador.nome}</h3>
-                  {morador.whatsapp && <p className="text-sm text-muted-foreground">{morador.whatsapp}</p>}
-                </div>
-
-                <Button onClick={() => setEditingMoradorId(morador.id)} className="w-full" variant="outline">
-                  <Camera className="h-4 w-4 mr-2" />
-                  Editar Foto
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Navegação */}
-            <div className="flex gap-2 justify-between">
-              <Button
-                onClick={() => setCarouselIndex(Math.max(0, carouselIndex - 1))}
-                disabled={carouselIndex === 0}
-                variant="outline"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-
-              <span className="text-sm text-muted-foreground self-center">
-                {carouselIndex + 1} de {moradores.length}
-              </span>
-
-              <Button
-                onClick={() => setCarouselIndex(Math.min(moradores.length - 1, carouselIndex + 1))}
-                disabled={carouselIndex === moradores.length - 1}
-                variant="outline"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <Button onClick={() => setShowAddForm(true)} className="w-full">
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Morador
-            </Button>
-          </>
-        ) : (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <p className="text-muted-foreground">Nenhum morador registrado</p>
-              <Button onClick={() => setShowAddForm(true)} className="mt-4 w-full">
-                Adicionar Morador
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Modal de novo morador */}
-        {showAddForm && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Novo Morador</CardTitle>
-              <button onClick={() => setShowAddForm(false)}>
-                <X className="h-5 w-5" />
-              </button>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleCriarMorador} className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium block mb-1">Nome</label>
-                  <Input
-                    value={form.nome}
-                    onChange={e => setForm({ ...form, nome: e.target.value })}
-                    placeholder="Nome completo"
-                  />
-                </div>
-
-                <WhatsAppInput
-                  ddd={form.ddd}
-                  numero={form.numero}
-                  onChangeDDD={ddd => setForm({ ...form, ddd })}
-                  onChangeNumero={numero => setForm({ ...form, numero })}
-                />
-
-                {/* Photo Capture */}
-                {estadoFoto === 'idle' && (
-                  <Button onClick={abrirCamera} type="button" className="w-full" variant="outline">
-                    <Camera className="h-4 w-4 mr-2" />
-                    Tirar Foto
-                  </Button>
+    <div className="p-4">
+      {moradores.length === 0 ? (
+        <p className="text-muted-foreground text-center">Nenhum morador registrado</p>
+      ) : (
+        <ul className="space-y-4">
+          {moradores.map(morador => (
+            <li key={morador.id} className="flex items-center gap-4 p-4 border rounded">
+              <div className="w-16 h-16 rounded overflow-hidden bg-slate-100 flex items-center justify-center">
+                {morador.fotoUrl ? (
+                  <img src={`${apiBase}${morador.fotoUrl}`} alt={morador.nome} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-muted-foreground">Sem foto</span>
                 )}
-
-                {estadoFoto === 'capturando' && (
-                  <div className="space-y-2">
-                    <video ref={videoRef} className="w-full rounded-lg bg-black" />
-                    <Button onClick={tirarFoto} type="button" className="w-full">
-                      Capturar
-                    </Button>
-                  </div>
-                )}
-
-                {estadoFoto === 'preview' && fotoPreview && (
-                  <div className="space-y-2">
-                    <img src={fotoPreview} alt="Preview" className="w-full rounded-lg" />
-                    <div className="flex gap-2">
-                      <Button onClick={refazerFoto} type="button" variant="outline" className="flex-1">
-                        Refazer
-                      </Button>
-                      <Button type="submit" className="flex-1" disabled={saving}>
-                        {saving ? 'Salvando...' : 'Confirmar'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {error && <p className="text-sm text-red-600">{error}</p>}
-              </form>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* Sidebar: Encomendas e Reservas */}
-      <div className="space-y-4">
-        {/* Encomendas Pendentes */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Clock className="h-5 w-5 text-amber-600" />
-              Encomendas Pendentes
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pendentes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma encomenda</p>
-            ) : (
-              <div className="space-y-2">
-                {pendentes.map(enc => (
-                  <div key={enc.id} className="p-2 bg-amber-50 rounded text-sm border border-amber-200">
-                    <p className="font-medium">{enc.descricao || 'Sem descrição'}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(enc.createdAt).toLocaleDateString('pt-BR')}
-                    </p>
-                  </div>
-                ))}
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Próximas Reservas */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CheckCircle className="h-5 w-5 text-blue-600" />
-              Próximas Reservas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {reservas.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma reserva</p>
-            ) : (
-              <div className="space-y-2">
-                {reservas.slice(0, 3).map(res => (
-                  <div key={res.id} className="p-2 bg-blue-50 rounded text-sm border border-blue-200">
-                    <p className="font-medium">{res.local}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(res.dataInicio).toLocaleDateString('pt-BR')}
-                    </p>
-                  </div>
-                ))}
+              <div className="flex-1">
+                <h3 className="font-medium">{morador.nome}</h3>
+                {morador.whatsapp && <p className="text-sm text-muted-foreground">{morador.whatsapp}</p>}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
+              <Button onClick={() => setEditingMoradorId(morador.id)} variant="outline" size="sm">
+                <Camera className="h-4 w-4 mr-1" />Foto
+              </Button>
+              <Button onClick={() => excluirMorador(morador.id)} variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4 mr-1" />Excluir
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button onClick={() => setShowAddForm(true)} className="w-full mt-4" size="sm">
+        <Plus className="h-4 w-4 mr-1" />Adicionar Morador
+      </Button>
       <canvas ref={canvasRef} className="hidden" />
     </div>
   );

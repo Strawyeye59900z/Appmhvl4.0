@@ -86,6 +86,12 @@ else
 fi
 ok "Repositório em $INSTALL_DIR"
 
+# Criar usuário não‑root para rodar os services (se ainda não existir)
+if ! id -u condominio >/dev/null 2>&1; then
+  useradd -r -s /usr/sbin/nologin condominio
+  ok "Usuário 'condominio' criado"
+fi
+
 # =============================================================================
 # PASSO 5 — Coletar variáveis interativamente
 # =============================================================================
@@ -204,7 +210,7 @@ After=network.target postgresql.service redis.service
 
 [Service]
 Type=simple
-User=root
+User=condominio
 WorkingDirectory=${INSTALL_DIR}
 EnvironmentFile=${INSTALL_DIR}/.env
 ExecStart=/usr/bin/node apps/api/dist/main.js
@@ -226,7 +232,7 @@ After=network.target condominio-api.service
 
 [Service]
 Type=simple
-User=root
+User=condominio
 WorkingDirectory=${INSTALL_DIR}/apps/web
 EnvironmentFile=${INSTALL_DIR}/.env
 EnvironmentFile=${INSTALL_DIR}/apps/web/.env.local
@@ -244,24 +250,46 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable condominio-api condominio-web
-systemctl start condominio-api
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl enable condominio-api condominio-web
+  systemctl start condominio-api
 
-# Aguarda API subir antes do web
-echo -n "  Aguardando API iniciar"
-for i in $(seq 1 20); do
-  if curl -sf http://localhost:3001/api/v1/health &>/dev/null; then
-    echo ""
-    ok "API respondendo"
-    break
-  fi
-  echo -n "."
-  sleep 2
-done
+  # Aguarda API subir antes do web
+  echo -n "  Aguardando API iniciar"
+  for i in $(seq 1 20); do
+    if curl -sf http://localhost:3001/api/v1/health &>/dev/null; then
+      echo ""
+      ok "API respondendo"
+      break
+    fi
+    echo -n "."
+    sleep 2
+  done
 
-systemctl start condominio-web
-ok "Services condominio-api e condominio-web iniciados"
-
+  systemctl start condominio-web
+  ok "Services condominio-api e condominio-web iniciados"
+else
+  warn "systemd não encontrado – iniciando serviços em background (dev mode)"
+  # iniciar API em background
+  cd "${INSTALL_DIR}"
+  npm run dev:api &
+  API_PID=$!
+  # aguarda API
+  echo -n "  Aguardando API iniciar"
+  for i in $(seq 1 20); do
+    if curl -sf http://localhost:3001/api/v1/health &>/dev/null; then
+      echo ""
+      ok "API respondendo"
+      break
+    fi
+    echo -n "."
+    sleep 2
+  done
+  # iniciar Web em background
+  cd "${INSTALL_DIR}/apps/web"
+  npm run dev:web &
+  ok "API e Web iniciados em background (PID $API_PID)"
+fi
 # =============================================================================
 # RESUMO FINAL
 # =============================================================================
