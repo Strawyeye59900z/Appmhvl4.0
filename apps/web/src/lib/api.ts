@@ -181,9 +181,30 @@ async function uploadFoto(blob: Blob): Promise<{ fotoUrl: string }> {
   return res.json();
 }
 
+async function uploadFotoAdmin(blob: Blob, pessoaId: string, tipo: 'MORADOR' | 'FUNCIONARIO'): Promise<{ fotoUrl: string }> {
+  const session = getSession();
+  const headers: Record<string, string> = {};
+  if (session?.accessToken) headers['Authorization'] = `Bearer ${session.accessToken}`;
+
+  const form = new FormData();
+  form.append('file', blob, 'foto.jpg');
+
+  const res = await fetch(`${BASE}/fotos/admin/upload?pessoaId=${pessoaId}&tipo=${tipo}`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: form,
+  });
+
+  if (!res.ok) throw await toError(res);
+  return res.json();
+}
+
 // Fotos
 export const fotos = {
   upload: (blob: Blob) => uploadFoto(blob),
+  uploadAdmin: (blob: Blob, pessoaId: string, tipo: 'MORADOR' | 'FUNCIONARIO') =>
+    uploadFotoAdmin(blob, pessoaId, tipo),
   meuStatusFacial: () =>
     request<{ status: 'OK' | 'PENDENTE' | 'PARCIALMENTE_OK' | 'FALHOU' | 'SEM_FOTO' }>(
       '/fotos/meu-status-facial',
@@ -204,9 +225,35 @@ export const hikvision = {
       request<{ status: string }>(`/hikvision/terminais/${id}/ping`, { method: 'POST' }),
   },
   syncStatus: () => request<any[]>('/hikvision/sync-status'),
-  retry: (pessoaId: string, role: 'MORADOR' | 'FUNCIONARIO') =>
+  retry: (pessoaId: string, role: 'MORADOR' | 'FUNCIONARIO' | 'VISITANTE') =>
     request<{ ok: boolean }>(`/hikvision/sync/${pessoaId}/retry`, {
       method: 'POST',
       body: JSON.stringify({ role }),
     }),
+};
+
+// Visitantes (morador)
+async function uploadFotoVisitante(blob: Blob, token: string): Promise<{ fotoUrl: string }> {
+  const form = new FormData();
+  form.append('file', blob, 'foto.jpg');
+  const res = await fetch(`${BASE}/visitantes/registrar-foto/${token}`, {
+    method: 'POST',
+    body: form,
+  });
+  if (!res.ok) throw await toError(res);
+  return res.json();
+}
+
+export const visitantes = {
+  tokenInfo: (token: string) =>
+    fetch(`${BASE}/visitantes/registrar-foto/${token}`)
+      .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message ?? 'Link inválido'); return r.json(); }),
+  registrarFoto: (token: string, blob: Blob) => uploadFotoVisitante(blob, token),
+  meus: () => request<any[]>('/visitantes/meus'),
+  criar: (body: { nome: string; tipo: string; meses: number }) =>
+    request<{ id: string; token: string; link: string }>('/visitantes', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  revogar: (id: string) => request<{ ok: boolean }>(`/visitantes/${id}`, { method: 'DELETE' }),
 };
