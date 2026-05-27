@@ -335,6 +335,203 @@ export class HikvisionService {
     await this.enfileirarSync(pessoaId, role);
   }
 
+  async reuploadTodosOsCadastros(): Promise<{ enfileirados: number }> {
+    const [moradores, funcionarios, visitantes] = await Promise.all([
+      this.prisma.morador.findMany({ where: { fotoUrl: { not: null }, ativo: true }, select: { id: true } }),
+      this.prisma.funcionario.findMany({ where: { fotoUrl: { not: null }, ativo: true }, select: { id: true } }),
+      this.prisma.visitante.findMany({ where: { fotoUrl: { not: null }, ativo: true }, select: { id: true } }),
+    ]);
+
+    let enfileirados = 0;
+
+    // Reenviar todos os moradores
+    for (const m of moradores) {
+      const terminaisAtivos = await this.prisma.hikvisionTerminal.findMany({ where: { ativo: true } });
+      for (const terminal of terminaisAtivos) {
+        const sync = await this.prisma.facialSync.upsert({
+          where: { moradorId_terminalId: { moradorId: m.id, terminalId: terminal.id } },
+          create: { moradorId: m.id, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+          update: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+        });
+
+        await this.queue.add(
+          'sync-facial',
+          { syncId: sync.id, terminalId: terminal.id, pessoaId: m.id, role: Role.MORADOR },
+          { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
+        );
+
+        enfileirados++;
+      }
+    }
+
+    // Reenviar todos os funcionários
+    for (const f of funcionarios) {
+      const terminaisAtivos = await this.prisma.hikvisionTerminal.findMany({ where: { ativo: true } });
+      for (const terminal of terminaisAtivos) {
+        const sync = await this.prisma.facialSync.upsert({
+          where: { funcionarioId_terminalId: { funcionarioId: f.id, terminalId: terminal.id } },
+          create: { funcionarioId: f.id, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+          update: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+        });
+
+        await this.queue.add(
+          'sync-facial',
+          { syncId: sync.id, terminalId: terminal.id, pessoaId: f.id, role: Role.FUNCIONARIO },
+          { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
+        );
+
+        enfileirados++;
+      }
+    }
+
+    // Reenviar todos os visitantes
+    for (const v of visitantes) {
+      const terminaisAtivos = await this.prisma.hikvisionTerminal.findMany({ where: { ativo: true } });
+      for (const terminal of terminaisAtivos) {
+        const sync = await this.prisma.facialSync.upsert({
+          where: { visitanteId_terminalId: { visitanteId: v.id, terminalId: terminal.id } },
+          create: { visitanteId: v.id, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+          update: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+        });
+
+        await this.queue.add(
+          'sync-facial',
+          { syncId: sync.id, terminalId: terminal.id, pessoaId: v.id, role: Role.VISITANTE },
+          { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
+        );
+
+        enfileirados++;
+      }
+    }
+
+    this.logger.log(`Reupload iniciado: ${enfileirados} cadastros enfileirados para sincronização`);
+    return { enfileirados };
+  }
+
+  async reuploadFalhasApenasReFila(): Promise<{ enfileirados: number }> {
+    // Buscar apenas syncs que falharam (status FALHOU)
+    const syncsFalhas = await this.prisma.facialSync.findMany({
+      where: { status: 'FALHOU' },
+      include: { terminal: true },
+    });
+
+    let enfileirados = 0;
+
+    for (const sync of syncsFalhas) {
+      let role: Role = Role.MORADOR;
+      let pessoaId: string | null = null;
+
+      if (sync.moradorId) {
+        role = Role.MORADOR;
+        pessoaId = sync.moradorId;
+      } else if (sync.funcionarioId) {
+        role = Role.FUNCIONARIO;
+        pessoaId = sync.funcionarioId;
+      } else if (sync.visitanteId) {
+        role = Role.VISITANTE;
+        pessoaId = sync.visitanteId;
+      }
+
+      if (!pessoaId) continue;
+
+      // Resetar sync e reenviar
+      await this.prisma.facialSync.update({
+        where: { id: sync.id },
+        data: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+      });
+
+      await this.queue.add(
+        'sync-facial',
+        { syncId: sync.id, terminalId: sync.terminalId, pessoaId, role },
+        { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
+      );
+
+      enfileirados++;
+    }
+
+    this.logger.log(`Reupload de falhas iniciado: ${enfileirados} cadastros enfileirados`);
+    return { enfileirados };
+  }
+
+  async reuploadFalhasComDeletePrior(): Promise<{ enfileirados: number; deletados: number }> {
+    // Buscar apenas syncs que falharam
+    const syncsFalhas = await this.prisma.facialSync.findMany({
+      where: { status: 'FALHOU' },
+      include: { terminal: true },
+    });
+
+    let deletados = 0;
+    let enfileirados = 0;
+
+    for (const sync of syncsFalhas) {
+      let role: Role = Role.MORADOR;
+      let pessoaId: string | null = null;
+      let codigoFacial: number | null = null;
+
+      // Obter dados da pessoa para ter o código facial
+      if (sync.moradorId) {
+        role = Role.MORADOR;
+        pessoaId = sync.moradorId;
+        const morador = await this.prisma.morador.findUnique({ where: { id: pessoaId } });
+        codigoFacial = morador?.codigoFacial ?? null;
+      } else if (sync.funcionarioId) {
+        role = Role.FUNCIONARIO;
+        pessoaId = sync.funcionarioId;
+        const func = await this.prisma.funcionario.findUnique({ where: { id: pessoaId } });
+        codigoFacial = func?.codigoFacial ?? null;
+      } else if (sync.visitanteId) {
+        role = Role.VISITANTE;
+        pessoaId = sync.visitanteId;
+        const visit = await this.prisma.visitante.findUnique({ where: { id: pessoaId } });
+        codigoFacial = visit?.codigoFacial ?? null;
+      }
+
+      if (!pessoaId || !codigoFacial) continue;
+
+      // Tentar deletar do terminal antes de reenviar
+      try {
+        const terminal = sync.terminal;
+        const password = this.decryptPassword(terminal.passwordEnc);
+        const base = `http://${terminal.host}:${terminal.porta}`;
+
+        await digestRequest({
+          method: 'DELETE',
+          url: `${base}/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json&faceID=${codigoFacial}`,
+          username: terminal.username,
+          password,
+          data: { FACEINFO: { faceID: codigoFacial } },
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+
+        deletados++;
+        this.logger.log(`Deletado face ${codigoFacial} do terminal ${terminal.nome}`);
+      } catch (err: any) {
+        this.logger.warn(
+          `Falha ao deletar face ${codigoFacial} do terminal ${sync.terminal.nome}: ${err?.message}`,
+        );
+        // Continuar mesmo se delete falhar
+      }
+
+      // Resetar e reenviar
+      await this.prisma.facialSync.update({
+        where: { id: sync.id },
+        data: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+      });
+
+      await this.queue.add(
+        'sync-facial',
+        { syncId: sync.id, terminalId: sync.terminalId, pessoaId, role },
+        { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
+      );
+
+      enfileirados++;
+    }
+
+    this.logger.log(`Reupload com delete: ${deletados} deletados, ${enfileirados} enfileirados`);
+    return { deletados, enfileirados };
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   async getTerminalOrThrow(id: string) {

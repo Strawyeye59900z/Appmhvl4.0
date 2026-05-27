@@ -37,7 +37,7 @@ function PrimeiroAcessoForm() {
     setLoading(true);
     try {
       const res = await authApi.setupMorador({
-        numeroApartamento: numeroApartamento || apartamentoId,
+        apartamentoId: apartamentoId || numeroApartamento,
         novaSenha
       });
       const payload = parseJwtPayload(res.accessToken);
@@ -130,7 +130,6 @@ function PrimeiroAcessoForm() {
       </Button>
     </form>
   );
-  );
 }
 
 export default function PrimeiroAcessoPage() {
@@ -145,7 +144,7 @@ export default function PrimeiroAcessoPage() {
           <div>
             <h1 className="text-2xl font-semibold">Primeiro acesso</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Configure sua conta em 2 passos
+              Configure sua senha
             </p>
           </div>
         </div>

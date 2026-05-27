@@ -54,4 +54,19 @@ export class HikvisionController {
     else role = Role.VISITANTE;
     return this.hikvisionService.reenviarSync(pessoaId, role).then(() => ({ ok: true }));
   }
+
+  @Post('reupload/todos')
+  reuploadTodos() {
+    return this.hikvisionService.reuploadTodosOsCadastros();
+  }
+
+  @Post('reupload/falhas')
+  reuploadFalhas() {
+    return this.hikvisionService.reuploadFalhasApenasReFila();
+  }
+
+  @Post('reupload/falhas-com-delete')
+  reuploadFalhasComDelete() {
+    return this.hikvisionService.reuploadFalhasComDeletePrior();
+  }
 }

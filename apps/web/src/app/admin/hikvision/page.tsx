@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { hikvision as hikvisionApi } from '@/lib/api';
+import { getSession } from '@/lib/auth';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ function StatusBadge({ status }: { status: string }) {
 // ── Main page ─────────────────────────────────────────────────────────────
 
 export default function HikvisionPage() {
-  const [aba, setAba] = useState<'terminais' | 'sync'>('terminais');
+  const [aba, setAba] = useState<'terminais' | 'sync' | 'reupload'>('terminais');
   const [terminais, setTerminais] = useState<Terminal[]>([]);
   const [syncStatus, setSyncStatus] = useState<SyncEntry[]>([]);
   const [loadingTerminais, setLoadingTerminais] = useState(true);
@@ -64,6 +65,10 @@ export default function HikvisionPage() {
   const [filtroTipo, setFiltroTipo] = useState<'TODOS' | 'MORADOR' | 'FUNCIONARIO' | 'VISITANTE'>('TODOS');
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Terminal | null>(null);
+
+  // Reupload state
+  const [carregandoReupload, setCarregandoReupload] = useState(false);
+  const [resultadoReupload, setResultadoReupload] = useState<{ tipo: string; mensagem: string } | null>(null);
 
   const [nome, setNome] = useState('');
   const [host, setHost] = useState('');
@@ -149,6 +154,75 @@ export default function HikvisionPage() {
     await carregarSync();
   }
 
+  async function handleReuploadTodos() {
+    if (!confirm('Isso vai reenviar TODOS os cadastros com foto para todos os terminais. Continuar?')) return;
+    setCarregandoReupload(true);
+    setResultadoReupload(null);
+    try {
+      const session = getSession();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/hikvision/reupload/todos`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.accessToken}` },
+      });
+      const data = await res.json();
+      setResultadoReupload({
+        tipo: 'sucesso',
+        mensagem: `✓ ${data.enfileirados} cadastros enfileirados para sincronização`,
+      });
+      await carregarSync();
+    } catch (err: any) {
+      setResultadoReupload({ tipo: 'erro', mensagem: err.message ?? 'Erro ao processar reupload' });
+    } finally {
+      setCarregandoReupload(false);
+    }
+  }
+
+  async function handleReuploadFalhas() {
+    if (!confirm('Isso vai reenviar apenas os cadastros que falharam. Continuar?')) return;
+    setCarregandoReupload(true);
+    setResultadoReupload(null);
+    try {
+      const session = getSession();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/hikvision/reupload/falhas`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.accessToken}` },
+      });
+      const data = await res.json();
+      setResultadoReupload({
+        tipo: 'sucesso',
+        mensagem: `✓ ${data.enfileirados} cadastros com falha enfileirados`,
+      });
+      await carregarSync();
+    } catch (err: any) {
+      setResultadoReupload({ tipo: 'erro', mensagem: err.message ?? 'Erro ao processar reupload de falhas' });
+    } finally {
+      setCarregandoReupload(false);
+    }
+  }
+
+  async function handleReuploadFalhasComDelete() {
+    if (!confirm('Isso vai deletar e reenviar os cadastros que falharam dos terminais. Continuar?')) return;
+    setCarregandoReupload(true);
+    setResultadoReupload(null);
+    try {
+      const session = getSession();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/hikvision/reupload/falhas-com-delete`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${session?.accessToken}` },
+      });
+      const data = await res.json();
+      setResultadoReupload({
+        tipo: 'sucesso',
+        mensagem: `✓ ${data.deletados} cadastros deletados, ${data.enfileirados} reenviados`,
+      });
+      await carregarSync();
+    } catch (err: any) {
+      setResultadoReupload({ tipo: 'erro', mensagem: err.message ?? 'Erro ao processar reupload com delete' });
+    } finally {
+      setCarregandoReupload(false);
+    }
+  }
+
   const STATUS_ORDER: Record<string, number> = {
     PENDENTE: 0, EM_FILA: 0, ENVIANDO: 0, FALHOU: 1, PARCIALMENTE_OK: 2, OK: 3,
   };
@@ -186,6 +260,14 @@ export default function HikvisionPage() {
           }`}
         >
           Sincronização
+        </button>
+        <button
+          onClick={() => setAba('reupload')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            aba === 'reupload' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Reupload
         </button>
       </div>
 
@@ -333,6 +415,80 @@ export default function HikvisionPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* Aba Reupload */}
+      {aba === 'reupload' && (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-semibold text-blue-900 mb-2">Reupload de cadastros</h3>
+            <p className="text-sm text-blue-800">
+              Use as opções abaixo para reenviar cadastros para os terminais Hikvision.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <button
+              onClick={handleReuploadTodos}
+              disabled={carregandoReupload}
+              className="flex flex-col gap-3 p-6 rounded-lg border hover:border-primary hover:bg-primary/5 transition-all text-left disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-blue-600" />
+                <span className="font-medium">Reenviar Todos</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Reenvia TODOS os cadastros com foto para todos os terminais. Útil para fazer upload de fotos novas.
+              </p>
+            </button>
+
+            <button
+              onClick={handleReuploadFalhas}
+              disabled={carregandoReupload}
+              className="flex flex-col gap-3 p-6 rounded-lg border hover:border-orange-300 hover:bg-orange-50 transition-all text-left disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-orange-600" />
+                <span className="font-medium">Reenviar Falhas</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Reenvia apenas os cadastros que falharam na sincronização.
+              </p>
+            </button>
+
+            <button
+              onClick={handleReuploadFalhasComDelete}
+              disabled={carregandoReupload}
+              className="flex flex-col gap-3 p-6 rounded-lg border hover:border-red-300 hover:bg-red-50 transition-all text-left disabled:opacity-50"
+            >
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-red-600" />
+                <span className="font-medium">Delete + Reupload</span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Deleta os cadastros que falharam dos terminais e reenvia. Use se o facial fica corrompido.
+              </p>
+            </button>
+          </div>
+
+          {resultadoReupload && (
+            <div className={`rounded-lg border p-4 ${
+              resultadoReupload.tipo === 'sucesso'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-red-50 border-red-200'
+            }`}>
+              <p className={`text-sm ${resultadoReupload.tipo === 'sucesso' ? 'text-green-700' : 'text-red-700'}`}>
+                {resultadoReupload.mensagem}
+              </p>
+            </div>
+          )}
+
+          {carregandoReupload && (
+            <div className="flex items-center justify-center p-8">
+              <p className="text-muted-foreground">Processando reupload...</p>
+            </div>
+          )}
         </div>
       )}
 
