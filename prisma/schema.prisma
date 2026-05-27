@@ -54,7 +54,8 @@ model Funcionario {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  encomendas Encomenda[]
+  encomendas  Encomenda[]
+  facialSyncs FacialSync[]
 }
 
 model Apartamento {
@@ -168,19 +169,22 @@ model HikvisionTerminal {
 }
 
 model FacialSync {
-  id         String           @id @default(cuid())
-  status     FacialSyncStatus @default(PENDENTE)
-  tentativas Int              @default(0)
-  ultimoErro String?
-  enviadoEm  DateTime?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+  id            String           @id @default(cuid())
+  status        FacialSyncStatus @default(PENDENTE)
+  tentativas    Int              @default(0)
+  ultimoErro    String?
+  enviadoEm     DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
-  moradorId  String
-  morador    Morador           @relation(fields: [moradorId], references: [id])
-  terminalId String
-  terminal   HikvisionTerminal @relation(fields: [terminalId], references: [id])
+  moradorId     String?
+  morador       Morador?          @relation(fields: [moradorId], references: [id])
+  funcionarioId String?
+  funcionario   Funcionario?      @relation(fields: [funcionarioId], references: [id])
+  terminalId    String
+  terminal      HikvisionTerminal @relation(fields: [terminalId], references: [id])
 
   @@unique([moradorId, terminalId])
+  @@unique([funcionarioId, terminalId])
   @@index([status, updatedAt])
 }
