@@ -28,7 +28,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) throw await toError(res);
-  return res.json() as Promise<T>;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 async function tryRefresh(): Promise<boolean> {
@@ -69,6 +71,8 @@ export const auth = {
       body: JSON.stringify(body),
     }),
   getFuncionarios: () => request<{ id: string; nome: string }[]>('/auth/funcionarios'),
+  setupFuncionario: (body: { funcionarioId: string; novaSenha: string }) =>
+    request<{ accessToken: string }>('/auth/funcionario/setup', { method: 'POST', body: JSON.stringify(body) }),
   setupMorador: (body: { apartamentoId: string; novaSenha: string }) =>
     request<{ accessToken: string }>('/auth/morador/setup', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
@@ -83,6 +87,8 @@ export const apartamentos = {
     request<any>('/apartamentos', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: object) =>
     request<any>(`/apartamentos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetSenha: (id: string) =>
+    request<any>(`/apartamentos/${id}/reset-senha`, { method: 'PATCH' }),
   remove: (id: string) => request<any>(`/apartamentos/${id}`, { method: 'DELETE' }),
 };
 
@@ -90,6 +96,7 @@ export const apartamentos = {
 export const moradores = {
   list: (apartamentoId?: string) =>
     request<any[]>(`/moradores${apartamentoId ? `?apartamentoId=${apartamentoId}` : ''}`),
+  meus: () => request<any[]>('/moradores/meus'),
   get: (id: string) => request<any>(`/moradores/${id}`),
   create: (body: object) => request<any>('/moradores', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: object) =>
@@ -119,7 +126,7 @@ export const reservas = {
   espacos: () => request<any[]>('/reservas/espacos'),
   disponibilidade: (espacoId: string, data: string) =>
     request<any>(`/reservas/disponibilidade?espacoId=${espacoId}&data=${data}`),
-  criar: (body: { espacoReservaId: string; data: string; horaInicio?: string; observacao?: string; apartamentoId?: string }) =>
+  criar: (body: { espacoReservaId: string; data: string; horaInicio?: string; duracao?: number; observacao?: string; apartamentoId?: string }) =>
     request<any>('/reservas', { method: 'POST', body: JSON.stringify(body) }),
   cancelar: (id: string) => request<any>(`/reservas/${id}`, { method: 'DELETE' }),
   listar: (params?: { espacoId?: string; data?: string; apartamentoId?: string }) => {
@@ -131,6 +138,12 @@ export const reservas = {
     return request<any[]>(`/reservas${query ? `?${query}` : ''}`);
   },
   minhas: () => request<any[]>('/reservas/minhas'),
+};
+
+// WhatsApp
+export const whatsapp = {
+  status: () => request<{ connected: boolean }>('/whatsapp/status'),
+  qr: () => request<{ qr: string } | null>('/whatsapp/qr'),
 };
 
 // Funcionários

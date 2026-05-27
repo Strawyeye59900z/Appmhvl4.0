@@ -8,6 +8,7 @@ import { MoradoresModule } from './moradores/moradores.module';
 import { FuncionariosModule } from './funcionarios/funcionarios.module';
 import { EncomendasModule } from './encomendas/encomendas.module';
 import { ReservasModule } from './reservas/reservas.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReservasModule } from './reservas/reservas.module';
     FuncionariosModule,
     EncomendasModule,
     ReservasModule,
+    WhatsAppModule,
   ],
 })
 export class AppModule {}
