@@ -210,7 +210,12 @@ export class HikvisionService {
       where: { ativo: true },
     });
 
-    this.logger.debug(`Enfileirando sync para ${pessoaId} (${role}): encontrados ${terminaisAtivos.length} terminais ativos`);
+    this.logger.log(`🔄 Enfileirando sync para ${pessoaId} (${role}): encontrados ${terminaisAtivos.length} terminais ativos`);
+
+    if (terminaisAtivos.length === 0) {
+      this.logger.warn(`⚠️  Nenhum terminal ativo encontrado para sincronização`);
+      return;
+    }
 
     for (const terminal of terminaisAtivos) {
       let whereClause: any;
@@ -228,20 +233,26 @@ export class HikvisionService {
         createData = { visitanteId: pessoaId, terminalId: terminal.id, status: 'PENDENTE', tentativas: 0, ultimoErro: null };
       }
 
-      const sync = await this.prisma.facialSync.upsert({
-        where: whereClause,
-        create: createData,
-        update: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
-      });
+      try {
+        const sync = await this.prisma.facialSync.upsert({
+          where: whereClause,
+          create: createData,
+          update: { status: 'PENDENTE', tentativas: 0, ultimoErro: null },
+        });
 
-      await this.queue.add(
-        'sync-facial',
-        { syncId: sync.id, terminalId: terminal.id, pessoaId, role },
-        { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
-      );
+        await this.queue.add(
+          'sync-facial',
+          { syncId: sync.id, terminalId: terminal.id, pessoaId, role },
+          { attempts: 5, backoff: { type: 'exponential', delay: 30000 } },
+        );
 
-      this.logger.debug(`Job enfileirado para terminal ${terminal.nome} (${terminal.id})`);
+        this.logger.log(`✓ Job enfileirado para ${terminal.nome} (${terminal.id})`);
+      } catch (err: any) {
+        this.logger.error(`✗ Erro ao enfileirar job para terminal ${terminal.nome}: ${err?.message}`);
+      }
     }
+
+    this.logger.log(`✅ Enfileiramento completo: ${terminaisAtivos.length} jobs criados`);
   }
 
   async listarStatusSync() {
