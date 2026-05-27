@@ -144,6 +144,9 @@ export const reservas = {
 export const whatsapp = {
   status: () => request<{ connected: boolean }>('/whatsapp/status'),
   qr: () => request<{ qr: string } | null>('/whatsapp/qr'),
+  template: () => request<{ template: string }>('/whatsapp/template'),
+  updateTemplate: (template: string) =>
+    request<{ template: string }>('/whatsapp/template', { method: 'PUT', body: JSON.stringify({ template }) }),
 };
 
 // Funcionários
@@ -157,4 +160,53 @@ export const funcionarios = {
   resetSenha: (id: string, senha: string) =>
     request<any>(`/funcionarios/${id}/senha`, { method: 'PATCH', body: JSON.stringify({ senha }) }),
   remove: (id: string) => request<any>(`/funcionarios/${id}`, { method: 'DELETE' }),
+};
+
+async function uploadFoto(blob: Blob): Promise<{ fotoUrl: string }> {
+  const session = getSession();
+  const headers: Record<string, string> = {};
+  if (session?.accessToken) headers['Authorization'] = `Bearer ${session.accessToken}`;
+
+  const form = new FormData();
+  form.append('file', blob, 'foto.jpg');
+
+  const res = await fetch(`${BASE}/fotos/minha-foto`, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+    body: form,
+  });
+
+  if (!res.ok) throw await toError(res);
+  return res.json();
+}
+
+// Fotos
+export const fotos = {
+  upload: (blob: Blob) => uploadFoto(blob),
+  meuStatusFacial: () =>
+    request<{ status: 'OK' | 'PENDENTE' | 'PARCIALMENTE_OK' | 'FALHOU' | 'SEM_FOTO' }>(
+      '/fotos/meu-status-facial',
+    ),
+};
+
+// Hikvision (admin)
+export const hikvision = {
+  terminais: {
+    list: () => request<any[]>('/hikvision/terminais'),
+    create: (body: { nome: string; host: string; porta?: number; username: string; password: string }) =>
+      request<any>('/hikvision/terminais', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: object) =>
+      request<any>(`/hikvision/terminais/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    remove: (id: string) =>
+      request<any>(`/hikvision/terminais/${id}`, { method: 'DELETE' }),
+    ping: (id: string) =>
+      request<{ status: string }>(`/hikvision/terminais/${id}/ping`, { method: 'POST' }),
+  },
+  syncStatus: () => request<any[]>('/hikvision/sync-status'),
+  retry: (pessoaId: string, role: 'MORADOR' | 'FUNCIONARIO') =>
+    request<{ ok: boolean }>(`/hikvision/sync/${pessoaId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    }),
 };
