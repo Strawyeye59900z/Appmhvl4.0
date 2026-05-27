@@ -1,12 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopNav } from './TopNav';
 import { cn } from '@/lib/utils';
+import { getSession } from '@/lib/auth';
+import { fotos as fotosApi } from '@/lib/api';
+import { FotoCaptura } from '@/components/ui/foto-captura';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [precisaFoto, setPrecisaFoto] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session) { setPrecisaFoto(false); return; }
+    const role = session.role;
+    if (role !== 'MORADOR' && role !== 'FUNCIONARIO') {
+      setPrecisaFoto(false);
+      return;
+    }
+    fotosApi.meuStatusFacial()
+      .then((res) => setPrecisaFoto(res.status === 'SEM_FOTO'))
+      .catch(() => setPrecisaFoto(false));
+  }, []);
+
+  if (precisaFoto === null) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p className="text-muted-foreground text-sm">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (precisaFoto) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-muted/30 p-4">
+        <div className="bg-background rounded-xl border shadow-sm p-8 max-w-sm w-full space-y-6 text-center">
+          <div className="space-y-2">
+            <h1 className="text-xl font-semibold">Foto de perfil</h1>
+            <p className="text-sm text-muted-foreground">
+              Para continuar, tire uma foto para seu perfil. Ela será usada no sistema de acesso do condomínio.
+            </p>
+          </div>
+          <FotoCaptura
+            label="Abrir câmera"
+            onSuccess={() => setPrecisaFoto(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
