@@ -1,8 +1,7 @@
 import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const FormData = require('form-data');
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { HikvisionService, digestRequest } from './hikvision.service';
 import { QUEUE_HIKVISION } from '../queue/queue.constants';
@@ -15,6 +14,23 @@ interface SyncFacialPayload {
   terminalId: string;
   pessoaId: string;
   role: Role;
+}
+
+function buildMultipart(
+  boundary: string,
+  parts: { name: string; contentType: string; filename?: string; data: Buffer | string }[],
+): Buffer {
+  const chunks: Buffer[] = [];
+  for (const part of parts) {
+    let header = `--${boundary}\r\nContent-Disposition: form-data; name="${part.name}"`;
+    if (part.filename) header += `; filename="${part.filename}"`;
+    header += `\r\nContent-Type: ${part.contentType}\r\n\r\n`;
+    chunks.push(Buffer.from(header, 'utf8'));
+    chunks.push(Buffer.isBuffer(part.data) ? part.data : Buffer.from(part.data, 'utf8'));
+    chunks.push(Buffer.from('\r\n', 'utf8'));
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`, 'utf8'));
+  return Buffer.concat(chunks);
 }
 
 @Processor(QUEUE_HIKVISION)
@@ -61,26 +77,32 @@ export class HikvisionProcessor {
         timeout: 10000,
       });
 
-      // Step 2: Enviar foto como multipart
+      // Step 2: Enviar foto como multipart (sem dependência form-data)
       const fotoBuffer = await this.hikvisionService.getFotoBuffer(pessoaId);
       const faceRecord = buildFaceDataRecord(pessoaId);
+      const boundary = crypto.randomBytes(16).toString('hex');
 
-      const form = new FormData();
-      form.append('FaceDataRecord', JSON.stringify(faceRecord), {
-        contentType: 'application/json',
-      });
-      form.append('FaceImage', fotoBuffer, {
-        filename: `${pessoaId}.jpg`,
-        contentType: 'image/jpeg',
-      });
+      const body = buildMultipart(boundary, [
+        {
+          name: 'FaceDataRecord',
+          contentType: 'application/json',
+          data: JSON.stringify(faceRecord),
+        },
+        {
+          name: 'FaceImage',
+          contentType: 'image/jpeg',
+          filename: `${pessoaId}.jpg`,
+          data: fotoBuffer,
+        },
+      ]);
 
       await digestRequest({
         method: 'POST',
         url: `${base}/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json`,
         username: terminal.username,
         password,
-        data: form,
-        headers: form.getHeaders(),
+        data: body,
+        headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
         timeout: 15000,
       });
 
