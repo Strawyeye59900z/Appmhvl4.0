@@ -1,7 +1,8 @@
 import { Processor, Process } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
-import * as FormData from 'form-data';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const FormData = require('form-data');
 import { PrismaService } from '../prisma/prisma.service';
 import { HikvisionService, digestRequest } from './hikvision.service';
 import { QUEUE_HIKVISION } from '../queue/queue.constants';

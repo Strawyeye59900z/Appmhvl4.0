@@ -15,7 +15,7 @@ import { QUEUE_HIKVISION } from '../queue/queue.constants';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import axios from 'axios';
+import axios, { Method } from 'axios';
 
 // ── Digest Auth helper ────────────────────────────────────────────────────────
 
@@ -63,10 +63,12 @@ export async function digestRequest(opts: {
 }): Promise<any> {
   const { method, url, username, password, data, headers = {}, timeout = 10000 } = opts;
 
+  const axiosMethod = method.toUpperCase() as Method;
+
   // First request — will get 401 with WWW-Authenticate
   let challenge: Record<string, string>;
   try {
-    await axios({ method, url, data, headers, timeout });
+    await axios({ method: axiosMethod, url, data, headers, timeout });
     // If no 401, no auth needed (shouldn't happen with Hikvision, but handle gracefully)
     return;
   } catch (err: any) {
@@ -79,10 +81,10 @@ export async function digestRequest(opts: {
   const urlObj = new URL(url);
   const uri = urlObj.pathname + urlObj.search;
 
-  const authHeader = buildDigestAuth(method.toUpperCase(), uri, username, password, challenge);
+  const authHeader = buildDigestAuth(axiosMethod, uri, username, password, challenge);
 
   return axios({
-    method,
+    method: axiosMethod,
     url,
     data,
     headers: { ...headers, Authorization: authHeader },
