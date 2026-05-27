@@ -8,6 +8,7 @@ import { Boom } from '@hapi/boom';
 import * as QRCode from 'qrcode';
 import * as path from 'path';
 import * as fs from 'fs';
+import P from 'pino';
 
 @Injectable()
 export class WhatsAppClient implements OnModuleInit, OnModuleDestroy {
@@ -29,7 +30,11 @@ export class WhatsAppClient implements OnModuleInit, OnModuleDestroy {
   private async connect() {
     const { state, saveCreds } = await useMultiFileAuthState(this.authDir);
 
-    this.socket = makeWASocket({ auth: state, printQRInTerminal: false, logger: undefined as any });
+    this.socket = makeWASocket({
+      auth: state,
+      printQRInTerminal: false,
+      logger: P({ level: 'silent' }),
+    });
 
     this.socket.ev.on('creds.update', saveCreds);
 

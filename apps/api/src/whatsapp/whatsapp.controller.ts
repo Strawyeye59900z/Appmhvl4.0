@@ -3,11 +3,12 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { Role } from '../common/roles.enum';
 import { WhatsAppClient } from './whatsapp.client';
 
 @Controller('whatsapp')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles(Role.ADMIN)
 export class WhatsAppController {
   constructor(private readonly whatsapp: WhatsAppClient) {}
 
