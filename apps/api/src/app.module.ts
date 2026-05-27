@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { PrismaModule } from './prisma/prisma.module';
@@ -12,10 +13,12 @@ import { EncomendasModule } from './encomendas/encomendas.module';
 import { ReservasModule } from './reservas/reservas.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { FotosModule } from './fotos/fotos.module';
+import { HikvisionModule } from './hikvision/hikvision.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'uploads'),
       serveRoot: '/uploads',
@@ -30,6 +33,7 @@ import { FotosModule } from './fotos/fotos.module';
     ReservasModule,
     WhatsAppModule,
     FotosModule,
+    HikvisionModule,
   ],
 })
 export class AppModule {}

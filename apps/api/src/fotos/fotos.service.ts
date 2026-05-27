@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { HikvisionService } from '../hikvision/hikvision.service';
 import { Role } from '../common/roles.enum';
 import sharp from 'sharp';
 import * as fs from 'fs';
@@ -11,7 +12,10 @@ export type FacialStatus = 'SEM_FOTO' | 'PENDENTE' | 'OK' | 'PARCIALMENTE_OK' | 
 export class FotosService {
   private readonly uploadsDir = path.join(process.cwd(), 'uploads', 'fotos');
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hikvisionService: HikvisionService,
+  ) {
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
     }
@@ -39,6 +43,8 @@ export class FotosService {
     } else if (role === Role.FUNCIONARIO) {
       await this.prisma.funcionario.update({ where: { id: userId }, data: { fotoUrl } });
     }
+
+    await this.hikvisionService.enfileirarSync(userId, role);
 
     return fotoUrl;
   }
